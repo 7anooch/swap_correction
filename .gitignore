@@ -3,9 +3,18 @@ __pycache__/
 *.py[cod]
 *$py.class
 .DS_Store
+*/**/event_data.csv
 
 # C extensions
 *.so
+data/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
 
 # Distribution / packaging
 .Python
