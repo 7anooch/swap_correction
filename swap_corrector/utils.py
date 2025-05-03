@@ -153,7 +153,7 @@ def mismatch_arrays(a : list, b : list) -> np.ndarray:
 
 def get_time_axis(nframes : int, fps : int) -> np.ndarray:
     '''get a time axis based on the frame rate and frame count'''
-    return np.linspace(0,float(nframes)/fps,nframes)
+    return np.arange(nframes) / fps
 
 
 def where(cond : np.ndarray) -> np.ndarray:
@@ -461,15 +461,11 @@ def get_cross_sign(v1 : np.ndarray, v2 : np.ndarray) -> float | np.ndarray:
 # ----- Data Analysis -----
 
 def get_speed(x : np.ndarray, y : np.ndarray, fps : int, npoints : int) -> np.ndarray:
-    '''
-    Get speed based on x, y position data
-    '''
-    npts = len(x)
-    vx = ddt(x,npoints)
-    vy = ddt(y,npoints)
-
-    spd = np.sqrt(vx**2 + vy**2) * fps
-    return spd
+    '''get speed from position data'''
+    dx = ddt(x,npoints,fps)
+    dy = ddt(y,npoints,fps)
+    speed = np.sqrt(dx**2 + dy**2)
+    return speed
 
 
 def ddt(data : np.ndarray, npoints : int = 2, fps : int = 1,
@@ -557,17 +553,19 @@ def get_cross_segment_deltas(segments : list[tuple[int,int]] | np.ndarray,
 
 
 def rolling_mean(x : np.ndarray, w : int) -> np.ndarray:
-    '''Calculates a moving averageof the same length as the input vector'''
-    hw = w // 2
-    npts = len(x)
-    avg = [np.nanmean(x[max(0,i-hw):min(npts-1,i+hw)]) for i in range(npts)]
-    #std = [np.nanstd(x[max(0,i-hw):min(npts-1,i+hw)]) for i in range(npts)]
-    return np.array(avg)#, np.array(std)
+    '''Calculate rolling mean with window size w'''
+    if w <= 1:
+        return x
+    kernel = np.ones(w) / w
+    mean = np.convolve(x, kernel, mode='valid')
+    return mean
 
 
 def rolling_median(x : np.ndarray, w : int) -> np.ndarray:
-    '''Calculates a moving median of the same length as the input vector'''
-    hw = w // 2
-    npts = len(x)
-    med = [np.nanmedian(x[max(0,i-hw):min(npts-1,i+hw)]) for i in range(npts)]
-    return np.array(med)
+    '''Calculate rolling median with window size w'''
+    if w <= 1:
+        return x
+    n = len(x)
+    idx = np.arange(w//2, n-w//2)
+    median = np.array([np.median(x[i-w//2:i+w//2+1]) for i in idx])
+    return median

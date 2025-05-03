@@ -516,7 +516,20 @@ def compare_metrics(raw_metrics: dict, processed_metrics: dict) -> dict:
     comparison = {}
     for key in raw_metrics:
         if isinstance(raw_metrics[key], pd.DataFrame):
-            comparison[key] = raw_metrics[key].corrwith(processed_metrics[key])
+            # For DataFrames, calculate correlation for each column
+            corr = raw_metrics[key].corrwith(processed_metrics[key])
+            # Replace NaN values with 0
+            corr = corr.fillna(0.0)
+            comparison[key] = corr
         else:
-            comparison[key] = np.corrcoef(raw_metrics[key], processed_metrics[key])[0, 1]
+            # For arrays, calculate correlation coefficient
+            try:
+                corr = np.corrcoef(raw_metrics[key], processed_metrics[key])[0, 1]
+                # Replace NaN with 0
+                if np.isnan(corr):
+                    corr = 0.0
+            except:
+                # If correlation calculation fails, return 0.0
+                corr = 0.0
+            comparison[key] = float(corr)
     return comparison

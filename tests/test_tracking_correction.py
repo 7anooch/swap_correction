@@ -71,7 +71,7 @@ def test_interpolate_overlaps(sample_data_with_swaps):
     data, fps = sample_data_with_swaps
     
     # Apply interpolation
-    interpolated = tracking_correction.interpolate_overlaps(data, fps)
+    interpolated = tracking_correction.interpolate_gaps(data)
     
     # Check that interpolated data has the same shape
     assert interpolated.shape == data.shape

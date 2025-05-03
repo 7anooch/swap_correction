@@ -89,16 +89,20 @@ class KalmanFilter(object):
         self.x[:self.dim] = data[0,:] if xo is None else xo
 
         filtData = data.copy()
+        last_valid = self.x[:self.dim]  # Keep track of last valid position
+
         for i in range(data.shape[0]):
             # get next data point
             z = data[i,:]
 
-            # skip over NaN values
-            # these (to our knowledge) only occur at overlaps,
-            # so position data should not change much
-            # TODO: research more robust methods for dealing with gaps
-            if sum(np.isnan(z)) == 0:
+            # skip over NaN values by using last valid position
+            if np.any(np.isnan(z)):
+                self.predict()  # Still predict to update state
+                filtData[i,:] = last_valid  # Use last valid position
+            else:
                 self.predict()
                 filtData[i,:] = self.update(z)
+                last_valid = filtData[i,:]  # Update last valid position
+
         return filtData
                 

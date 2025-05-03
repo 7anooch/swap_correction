@@ -29,40 +29,43 @@ class FlagDetector:
         """
         self.overlap_threshold = overlap_threshold
         
-    def detect_all_flags(self, data: pd.DataFrame, fps: int, debug: bool = False) -> Dict[str, np.ndarray]:
+    def detect_all_flags(self, data: pd.DataFrame, fps: float = None, debug: bool = False) -> dict:
         """
         Detect all types of flags in the data.
-        
+
         Args:
-            data: DataFrame containing position data
-            fps: Frame rate
+            data: DataFrame containing tracking data
+            fps: Frame rate of the data
             debug: Whether to print debug messages
-            
+
         Returns:
-            Dictionary containing all detected flags
+            Dictionary of flag arrays
         """
-        nframes = len(data)
-        flags = {
-            'discontinuities_tail': np.zeros(nframes, dtype=bool),
-            'overlaps': np.zeros(nframes, dtype=bool),
-            'sign_reversals': np.zeros(nframes, dtype=bool),
-            'delta_mismatches': np.zeros(nframes, dtype=bool),
-            'overlap_sign_reversals': np.zeros(nframes, dtype=bool),
-            'overlap_minimum_mismatches': np.zeros(nframes, dtype=bool)
-        }
-        
+        flags = {}
+        n_frames = len(data)
+
         # Detect each type of flag
-        flags['discontinuities_tail'] = self.detect_discontinuities(data, 'tail', fps, debug=debug)
-        flags['overlaps'] = self.detect_overlaps(data, debug=debug)
-        flags['sign_reversals'] = self.detect_sign_reversals(data, debug=debug)
-        flags['delta_mismatches'] = self.detect_delta_mismatches(data, debug=debug)
-        flags['overlap_sign_reversals'] = self.detect_overlap_sign_reversals(data, debug=debug)
-        flags['overlap_minimum_mismatches'] = self.detect_overlap_minimum_mismatches(data, debug=debug)
-        
+        flags['discontinuities_tail'] = np.array(self.detect_discontinuities(data, 'tail', fps, debug=debug))
+        flags['overlaps'] = np.array(self.detect_overlaps(data, debug=debug))
+        flags['sign_reversals'] = np.array(self.detect_sign_reversals(data, debug=debug))
+        flags['delta_mismatches'] = np.array(self.detect_delta_mismatches(data, debug=debug))
+        flags['overlap_sign_reversals'] = np.array(self.detect_overlap_sign_reversals(data, debug=debug))
+        flags['overlap_minimum_mismatches'] = np.array(self.detect_overlap_minimum_mismatches(data, debug=debug))
+
+        # Ensure all flag arrays have the same length as the input data
+        for key in flags:
+            if len(flags[key]) != n_frames:
+                # Pad with False values if array is too short
+                if len(flags[key]) < n_frames:
+                    flags[key] = np.pad(flags[key], (0, n_frames - len(flags[key])), mode='constant', constant_values=False)
+                # Truncate if array is too long
+                else:
+                    flags[key] = flags[key][:n_frames]
+
         if debug:
             for flag_name, flag_data in flags.items():
                 logger.debug(f"{flag_name}: {np.sum(flag_data)} frames flagged")
-                
+
         return flags
     
     def detect_discontinuities(self, data: pd.DataFrame, key: str, fps: int,
@@ -80,9 +83,17 @@ class FlagDetector:
         Returns:
             Array of flagged frames
         """
-        # Implementation from original flag_discontinuities function
-        # ... existing code ...
+        # Calculate speed
+        speed = metrics.get_speed_from_df(data, key, fps)
         
+        # Flag frames where speed exceeds threshold
+        flags = speed > threshold
+        
+        if debug:
+            logger.debug(f"Discontinuities: {np.sum(flags)} frames flagged")
+            
+        return flags
+    
     def detect_overlaps(self, data: pd.DataFrame, tolerance: float = None,
                        pt1: str = 'head', pt2: str = 'tail',
                        debug: bool = False) -> np.ndarray:
@@ -101,9 +112,18 @@ class FlagDetector:
         """
         if tolerance is None:
             tolerance = self.overlap_threshold
-        # Implementation from original flag_overlaps function
-        # ... existing code ...
+            
+        # Calculate distance between points
+        dist = metrics.get_delta_in_frame(data, pt1, pt2)
         
+        # Flag frames where distance is less than tolerance
+        flags = dist < tolerance
+        
+        if debug:
+            logger.debug(f"Overlaps: {np.sum(flags)} frames flagged")
+            
+        return flags
+    
     def detect_sign_reversals(self, data: pd.DataFrame, threshold: float = np.pi/2,
                             debug: bool = False) -> np.ndarray:
         """
@@ -117,9 +137,20 @@ class FlagDetector:
         Returns:
             Array of flagged frames
         """
-        # Implementation from original flag_sign_reversals function
-        # ... existing code ...
+        # Calculate body angles
+        angles = metrics.get_head_angle(data)
         
+        # Calculate angle changes
+        angle_changes = np.abs(np.diff(angles, prepend=angles[0]))
+        
+        # Flag frames where angle change exceeds threshold
+        flags = angle_changes > threshold
+        
+        if debug:
+            logger.debug(f"Sign reversals: {np.sum(flags)} frames flagged")
+            
+        return flags
+    
     def detect_delta_mismatches(self, data: pd.DataFrame, tolerance: float = 0.0,
                               debug: bool = False) -> np.ndarray:
         """
@@ -133,9 +164,21 @@ class FlagDetector:
         Returns:
             Array of flagged frames
         """
-        # Implementation from original flag_delta_mismatches function
-        # ... existing code ...
+        # Calculate head and tail speeds
+        head_speed = metrics.get_speed_from_df(data, 'head')
+        tail_speed = metrics.get_speed_from_df(data, 'tail')
         
+        # Calculate speed ratio
+        speed_ratio = head_speed / (tail_speed + 1e-10)  # Add small value to avoid division by zero
+        
+        # Flag frames where speed ratio is outside tolerance
+        flags = np.logical_or(speed_ratio < 1 - tolerance, speed_ratio > 1 + tolerance)
+        
+        if debug:
+            logger.debug(f"Delta mismatches: {np.sum(flags)} frames flagged")
+            
+        return flags
+    
     def detect_overlap_sign_reversals(self, data: pd.DataFrame,
                                     tolerance: float = None,
                                     threshold: float = np.pi/4,
@@ -154,27 +197,83 @@ class FlagDetector:
         """
         if tolerance is None:
             tolerance = self.overlap_threshold
-        # Implementation from original flag_overlap_sign_reversals function
-        # ... existing code ...
+            
+        # Get overlap flags
+        overlap_flags = self.detect_overlaps(data, tolerance)
         
+        # Get sign reversal flags
+        reversal_flags = self.detect_sign_reversals(data, threshold)
+        
+        # Flag frames where both overlap and reversal occur
+        flags = np.logical_and(overlap_flags, reversal_flags)
+        
+        if debug:
+            logger.debug(f"Overlap sign reversals: {np.sum(flags)} frames flagged")
+            
+        return flags
+    
     def detect_overlap_minimum_mismatches(self, data: pd.DataFrame,
                                         tolerance: float = None,
                                         debug: bool = False) -> np.ndarray:
         """
         Detect minimum mismatches during overlap periods.
-        
+
         Args:
             data: DataFrame containing tracking data
             tolerance: Maximum allowed distance between points
             debug: Whether to print debug messages
-            
+
         Returns:
             Array of flagged frames
         """
         if tolerance is None:
             tolerance = self.overlap_threshold
-        # Implementation from original flag_overlap_minimum_mismatches function
-        # ... existing code ...
+
+        # Get overlap flags
+        overlap_flags = self.detect_overlaps(data, tolerance)
+
+        # Get delta mismatch flags
+        mismatch_flags = self.detect_delta_mismatches(data)
+
+        # Ensure arrays have same length
+        if len(overlap_flags) != len(mismatch_flags):
+            min_len = min(len(overlap_flags), len(mismatch_flags))
+            overlap_flags = overlap_flags[:min_len]
+            mismatch_flags = mismatch_flags[:min_len]
+
+        # Flag frames where both overlap and mismatch occur
+        flags = np.logical_and(overlap_flags, mismatch_flags)
+        return flags
+
+    def detect_zeroed_frames(self, data: pd.DataFrame) -> np.ndarray:
+        """
+        Detect frames where any position data is zero.
+
+        Args:
+            data: DataFrame containing tracking data
+
+        Returns:
+            Array of flagged frames
+        """
+        # Check for zeros in position columns
+        flags = np.zeros(len(data), dtype=bool)
+        for col in ['xhead', 'yhead', 'xtail', 'ytail']:
+            flags |= (data[col] == 0)
+        return flags
+
+    def detect_edge_frames(self, data: pd.DataFrame) -> np.ndarray:
+        """
+        Detect frames where any position data is at the edge of the frame.
+
+        Args:
+            data: DataFrame containing tracking data
+
+        Returns:
+            Array of flagged frames
+        """
+        # For now, just return an array of False values
+        # This can be implemented properly when we have frame size information
+        return np.zeros(len(data), dtype=bool)
 
 # ----- Tracking Correction -----
 

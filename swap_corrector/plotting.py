@@ -241,6 +241,7 @@ def multi_timeseries(ax : plt.Axes, time : np.ndarray, data : np.ndarray, ledDat
         labels.append('median')
         elements.append(Line2D([0], [0], color=medcol))
 
+
     ax.set_xlim(time[0],time[-1])
     if ylim : ax.set_ylim(ylim)
     ax.set_xlabel('Time(s)')

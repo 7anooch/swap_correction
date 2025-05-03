@@ -6,18 +6,23 @@ import logging
 from typing import Optional
 from .config import SwapCorrectionConfig
 
-def setup_logger(config: SwapCorrectionConfig) -> logging.Logger:
+def setup_logger(config: SwapCorrectionConfig, name: str = "swap_corrector") -> logging.Logger:
     """
     Set up logging configuration.
     
     Args:
         config: Configuration object containing logging settings
+        name: Name of the logger (default: "swap_corrector")
         
     Returns:
         Configured logger instance
     """
-    logger = logging.getLogger("swap_corrector")
+    logger = logging.getLogger(name)
     logger.setLevel(config.log_level)
+    
+    # Remove existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
     
     # Create formatter
     formatter = logging.Formatter(
