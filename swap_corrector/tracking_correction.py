@@ -155,29 +155,29 @@ class FlagDetector:
                               debug: bool = False) -> np.ndarray:
         """
         Detect mismatches in movement between head and tail.
-        
+
         Args:
             data: DataFrame containing tracking data
             tolerance: Allowed tolerance for mismatches
             debug: Whether to print debug messages
-            
+
         Returns:
             Array of flagged frames
         """
         # Calculate head and tail speeds
-        head_speed = metrics.get_speed_from_df(data, 'head')
-        tail_speed = metrics.get_speed_from_df(data, 'tail')
+        head_speed = metrics.get_speed_from_df(data, 'head', fps=30)
+        tail_speed = metrics.get_speed_from_df(data, 'tail', fps=30)
         
-        # Calculate speed ratio
-        speed_ratio = head_speed / (tail_speed + 1e-10)  # Add small value to avoid division by zero
+        # Calculate speed differences
+        speed_diff = np.abs(head_speed - tail_speed)
         
-        # Flag frames where speed ratio is outside tolerance
-        flags = np.logical_or(speed_ratio < 1 - tolerance, speed_ratio > 1 + tolerance)
+        # Flag frames with significant differences
+        mismatches = speed_diff > tolerance
         
         if debug:
-            logger.debug(f"Delta mismatches: {np.sum(flags)} frames flagged")
-            
-        return flags
+            print(f"Delta Mismatches: {np.where(mismatches)[0].tolist()}")
+        
+        return mismatches
     
     def detect_overlap_sign_reversals(self, data: pd.DataFrame,
                                     tolerance: float = None,
@@ -257,7 +257,7 @@ class FlagDetector:
         """
         # Check for zeros in position columns
         flags = np.zeros(len(data), dtype=bool)
-        for col in ['xhead', 'yhead', 'xtail', 'ytail']:
+        for col in ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint']:
             flags |= (data[col] == 0)
         return flags
 
@@ -302,34 +302,32 @@ def tracking_correction(data : pd.DataFrame, fps : int, swapCorrection : bool = 
     return data
 
 
-def remove_edge_frames(rawData : pd.DataFrame, debug : bool = False) -> pd.DataFrame:
+def remove_edge_frames(rawData: pd.DataFrame, debug: bool = False) -> pd.DataFrame:
     """
-    Set values in frames with all zero position entries at the beginning / end of data to NaN
+    Set values in frames with all zero position entries at the beginning / end of data to NaN.
     """
     data = rawData.copy()
-    cols = utils.flatten(metrics.POSDICT.values())
-    xcols = [col for col in cols if 'x' in col] # sloppy, but functional
-    ycols = [col for col in cols if 'y' in col]
-
-    # find overlap frames at edges where raw position data set to zero
-    # NOTE: data has been translated, so positions will not be zero; need to look see where all values identical
-    xdata = data.loc[:,xcols]
-    ydata = data.loc[:,ycols]
-    x = xdata.eq(xdata.iloc[:, 0], axis=0).all(1) # check if all values in row equal to first
-    y = ydata.eq(ydata.iloc[:, 0], axis=0).all(1)
-    counts = np.logical_and(x,y)
-    frames = np.where(counts)[0]
-    if debug : print('Zeroed Frames:',frames)
-
-    # get sequences at edges of data
-    segs = utils.get_consecutive_ranges(frames)
-    segs = [seg for seg in segs if seg[0] == 0 or seg[1] == data.shape[0]-1]
-    if debug : print('Edge Segments:',segs)
-
-    # set position data to NaN in target frames
-    for a, b in segs:
-        data.loc[a:b+1,cols] = np.nan
-
+    
+    # Get position columns
+    pos_cols = ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint']
+    xdata = data[pos_cols]
+    
+    # Find frames where all positions are zero
+    x = xdata.eq(0).all(axis=1)
+    
+    # Find start and end of non-zero frames
+    if np.any(x):
+        # Find first and last non-zero frames
+        start = np.where(~x)[0][0]
+        end = np.where(~x)[0][-1]
+        
+        # Set edge frames to NaN
+        data.loc[:start-1, pos_cols] = np.nan
+        data.loc[end+1:, pos_cols] = np.nan
+        
+        if debug:
+            print(f"Removed {start} frames at start and {len(data)-end-1} frames at end")
+    
     return data
 
 
@@ -396,8 +394,8 @@ def remove_overlaps(rawData : pd.DataFrame, fps : int, spdThresh : float = 20,
     tailErrMerged = utils.flatten(tailErr)
 
     # set overlap-discontinuity frames to NaN
-    data.loc[headErrMerged,['xhead','yhead']] = np.nan # remove head errors
-    data.loc[tailErrMerged,['xtail','ytail']] = np.nan # remove tail errors
+    data.loc[headErrMerged,['X-Head','Y-Head']] = np.nan # remove head errors
+    data.loc[tailErrMerged,['X-Tail','Y-Tail']] = np.nan # remove tail errors
 
     if debug:
         # redundant, but avoids additional computations if debug = False
@@ -408,36 +406,50 @@ def remove_overlaps(rawData : pd.DataFrame, fps : int, spdThresh : float = 20,
 
     return data
 
-def interpolate_gaps(rawData : pd.DataFrame, method : str = 'cubicspline', maxSegment : int = 15,
-                    debug : bool = False) -> pd.DataFrame:
-    '''
-    Interpolate over short segments of NaN values in the position data
-
-    rawData: dataframe with position data containing NaN values to interpolate over
-    method: interpolation method
-    maxSegment: maximum number of consecutive frames to interpolate over; larger gaps will be ignored
-    debug: print debug messages
-    '''
+def interpolate_gaps(rawData: pd.DataFrame, debug: bool = False) -> pd.DataFrame:
+    """Interpolate gaps in position data.
+    
+    Args:
+        rawData: DataFrame containing tracking data
+        debug: Whether to print debug messages
+        
+    Returns:
+        DataFrame with interpolated gaps
+    """
     data = rawData.copy()
-    cols = ['xhead','yhead','xtail','ytail','xctr','yctr','xmid','ymid']
-
-    # create mask indicating which values are either not NaNs or NaNs within short segments
-    mask = data[cols].notnull() # boolean DataFrame indicating non-null values
-    for col in cols:
-        # locate gaps
-        gaps = utils.get_value_segments(data[col],np.nan,inclusive=True)
-        if gaps.size == 0 : continue
-
-        # filter for gaps of appropriate length
-        query = np.diff(gaps,axis=1)[0] <= maxSegment
-        gaps = gaps[query,:]
-        gapFrames = utils.ranges_to_list(gaps)
-        mask.loc[gapFrames,col] = True
-
-        # get a sub-Series of the interpolated vector based on the mask
-        data[col] = data[col].interpolate(method=method)[mask[col]]
-
-        if debug : print('Interpolation ({}): ({}) {}'.format(col,len(gaps),gaps))
+    
+    # Position columns to interpolate
+    pos_cols = ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint']
+    
+    # Create mask of non-null values
+    mask = data[pos_cols].notnull()
+    
+    # Interpolate each column
+    for col in pos_cols:
+        # Get valid indices
+        valid = mask[col]
+        if not valid.all():
+            # Get first and last valid indices
+            start = valid.idxmax()
+            end = len(valid) - 1 - valid[::-1].idxmax()
+            
+            # Interpolate between valid points
+            x = np.arange(len(data))
+            y = data[col].values
+            valid_x = x[valid]
+            valid_y = y[valid]
+            
+            # Only interpolate if we have valid points
+            if len(valid_x) > 1:
+                data.loc[start:end, col] = np.interp(
+                    x[start:end+1],
+                    valid_x,
+                    valid_y
+                )
+    
+    if debug:
+        print("Interpolated gaps in position data")
+    
     return data
 
 
@@ -499,26 +511,6 @@ def flag_discontinuities(data : pd.DataFrame, key : str, fps : int,
     flag = np.where(delta > threshold)[0] + 1 # flag second frame of each pair used in diff()
 
     if debug : print('Discontinuities ({}): {}'.format(key,flag))
-    return flag
-
-
-def flag_delta_mismatches(data : pd.DataFrame, tolerance : float = 0.0, debug : bool = False) -> np.ndarray:
-    """
-    Flag frames where head and tail move shorter distance between frames if switched
-
-    data: dataframe containing raw position data
-    tolerance: minimum percent difference between distances required to flag
-    debug: print debug messages
-    """
-    delta = get_all_deltas(data)
-    dtt, dhh, dth, dht = delta
-
-    query = dtt + dhh > (dht + dth) * (tolerance + 1)
-    #query = dtt > dth * (tolerance + 1) and dhh > dht * (tolerance + 1) # this works less reliably?
-    #query = dtt > dth * (tolerance + 1) # more stable, but assumes tail is correctly-labeled initially
-    flag = np.where(query)[0] + 1
-
-    if debug : print('Delta Mismatches: {}'.format(flag))
     return flag
 
 
@@ -763,13 +755,13 @@ def correct_global_swap(rawData : pd.DataFrame, debug : bool = False) -> pd.Data
     filtered = filter_data(rawData)
 
     # get speeds
-    hspd = metrics.get_speed_from_df(filtered,'head')
-    tspd = metrics.get_speed_from_df(filtered,'tail')
+    hspd = metrics.get_speed_from_df(filtered, 'head', fps=30)  # Default to 30 fps if not specified
+    tspd = metrics.get_speed_from_df(filtered, 'tail', fps=30)  # Default to 30 fps if not specified
 
     # swap position data if tail speed varies more than head
     if np.nanmean(tspd) > np.nanmean(hspd):
         if debug : print('Correcting global head-tail reversal')
-        data[['xhead','yhead','xtail','ytail']] = data[['xtail','ytail','xhead','yhead']]
+        data[['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail']] = data[['X-Tail', 'Y-Tail', 'X-Head', 'Y-Head']]
     
     return data
 
@@ -1045,15 +1037,15 @@ def correct_swapped_segments(rawData : pd.DataFrame, segments : np.ndarray,
     #TODO: do this more efficiently
     for i in frames:
         #data.loc[i, ['xhead','yhead','xtail','ytail']] = data.loc[i, ['xtail','ytail','xhead','yhead']].to_numpy()
-        xh = data.at[i,'xhead']
-        yh = data.at[i,'yhead']
-        xt = data.at[i,'xtail']
-        yt = data.at[i,'ytail']
+        xh = data.at[i,'X-Head']
+        yh = data.at[i,'Y-Head']
+        xt = data.at[i,'X-Tail']
+        yt = data.at[i,'Y-Tail']
 
-        data.loc[i,'xhead'] = xt
-        data.loc[i,'yhead'] = yt
-        data.loc[i,'xtail'] = xh
-        data.loc[i,'ytail'] = yh
+        data.loc[i,'X-Head'] = xt
+        data.loc[i,'Y-Head'] = yt
+        data.loc[i,'X-Tail'] = xh
+        data.loc[i,'Y-Tail'] = yh
 
     if debug:
         print('Swapped Segments: {}'.format(segments))
@@ -1080,12 +1072,24 @@ def filter_sgolay(rawData : pd.DataFrame, window : int = 45, order : int = 4) ->
     return data
 
 
-def filter_gaussian(rawData : pd.DataFrame, sigma : float = 3) -> pd.DataFrame:
-    '''Apply Gaussian filter to the position data'''
+def filter_gaussian(rawData: pd.DataFrame, sigma: float = 3) -> pd.DataFrame:
+    """Apply Gaussian filter to position data.
+    
+    Args:
+        rawData: DataFrame containing tracking data
+        sigma: Standard deviation for Gaussian kernel
+        
+    Returns:
+        Filtered DataFrame
+    """
     data = rawData.copy()
-
-    for col in utils.flatten(metrics.POSDICT.values()):
-        data[col] = sp.ndimage.gaussian_filter1d(data[col].to_numpy(),sigma)
+    
+    # Position columns to filter
+    pos_cols = ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint']
+    
+    # Apply Gaussian filter to each column
+    for col in pos_cols:
+        data[col] = sp.ndimage.gaussian_filter1d(data[col].to_numpy(), sigma)
     
     return data
 
@@ -1162,8 +1166,8 @@ def filter_kalman(rawData : pd.DataFrame, fps : int, derivatives : int = 2, **kw
     cols = ['head','tail','mid','ctr'] # partial keys of columns of interest
     for col in cols:
         # extract data
-        xcol = 'x'+col
-        ycol = 'y'+col
+        xcol = 'X-'+col
+        ycol = 'Y-'+col
 
         start = max(data[xcol].first_valid_index(),data[ycol].first_valid_index())
         end = min(data[xcol].last_valid_index(),data[ycol].last_valid_index()) + 1

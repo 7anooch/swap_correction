@@ -102,16 +102,12 @@ def create_sample_matrix(samples : list[np.ndarray],
     length: length to fill / truncate arrays to; None -> use min / max length of list
     toMin: truncate to minimum array length; otherwise, fill to max (requires length = None)
     '''
-    # get sample and target lengths
-    sampleLength = [len(sample) for sample in samples]
-    if length is None : length = min(sampleLength) if toMin else max(sampleLength)
+    if length is None:
+        length = min(len(s) for s in samples) if toMin else max(len(s) for s in samples)
 
-    vec = np.zeros((len(samples),length))
+    vec = np.zeros((len(samples), length))
     for i in range(len(samples)):
-        if sampleLength[i] < length: # fill sample with NaNs to desired length
-            vec[i,:] = list(samples[i]) + [np.NaN] * (length - sampleLength[i])
-        else: # truncate sample
-            vec[i,:] = samples[i][:length]
+        vec[i,:] = list(samples[i]) + [np.nan] * (length - len(samples[i]))
     return vec
 
 

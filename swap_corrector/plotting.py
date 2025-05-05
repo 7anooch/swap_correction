@@ -9,6 +9,10 @@ from sklearn.neighbors import KernelDensity
 from scipy import stats, signal
 from . import utils
 import warnings
+import scipy.stats as sp
+from . import metrics
+from scipy.stats import gaussian_kde
+import scipy.ndimage as sp
 
 
 def save_figure(fig, name : str, outputDir : str | None = None, show : bool = False, block : bool = False) -> None:
@@ -27,77 +31,25 @@ def save_figure(fig, name : str, outputDir : str | None = None, show : bool = Fa
     else : plt.close(fig)
 
 
-def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
-            times : tuple | None = None, source : tuple[float,float] = (0,0),
-            ledData : np.ndarray | None = None, headTail : bool = True,
-            limits : tuple[float,float] | None = (-60,60), legend : bool = True) -> None:
-    """
-    Plot a single trajectory in detail
-
-    ax: pyplot axis
-    data: dataframe containing position data
-    fps: frame rate (only used if times == True)
-    times: (optional) start and end times for drawing trajectory segment
-    source: location of odor source
-    ledData: (optional) if not None, used to color segments of trajectory based on LED activity
-    headTail: indicate head and tail alongside centroid
-    limits: axis limits
-    legend: generate a figure legend
-    """
-    hcol = 'b' # head
-    tcol = 'r' # tail
-    ccol = 'grey' # centroid
-    anncol = 'g' # annotation color (odor, start)
-
-    if times is not None:
-        # get start, end indices
-        a, b = times
-        a *= fps
-        b *= fps
-
-        # get position data
-        xhead = data.loc[a:b-1,'xhead'].values
-        yhead = data.loc[a:b-1,'yhead'].values
-        xtail = data.loc[a:b-1,'xtail'].values
-        ytail = data.loc[a:b-1,'ytail'].values
-        xctr = data.loc[a:b-1,'xctr'].values
-        yctr = data.loc[a:b-1,'yctr'].values
-
-        # get first non-NaN position to indicate start
-        xo = xctr[~np.isnan(xctr)][0]
-        yo = yctr[~np.isnan(yctr)][0]
-
-        # assign centroid color using LED data
-        if ledData is not None : ccol = _get_colors_from_LED(ledData[a:b])
-
-        if headTail:
-            ax.plot(xhead,yhead,c=hcol,alpha=0.5,label='head')
-            ax.plot(xtail,ytail,c=tcol,alpha=0.5,label='tail')
-        ax.scatter(xctr,yctr,c=ccol,s=0.1,label='ctrd')
-        ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
-
-    else:
-        # get first non-NaN position to indicate start
-        xo = data['xctr'].loc[data['xctr'].first_valid_index()]
-        yo = data['yctr'].loc[data['yctr'].first_valid_index()]
-
-        if headTail:
-            ax.plot(data['xhead'],data['yhead'],c=hcol,alpha=0.5,label='head')
-            ax.plot(data['xtail'],data['ytail'],c=tcol,alpha=0.5,label='tail')
-        if ledData is None:
-            ax.plot(data['xctr'],data['yctr'],c=ccol,label='ctrd')
-        else:
-            ccol = _get_colors_from_LED(ledData)
-            ax.scatter(data['xctr'],data['yctr'],c=ccol,s=0.1,label='ctrd')
-        ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
-        
-    ax.scatter(*source,c=anncol,marker='o',s=10,label='odor')
-    ax.set_title('Trajectory (mm)')
-    if limits is not None:
-        ax.set_xlim(*limits)
-        ax.set_ylim(*limits)
-    ax.axis('square')
-    if legend : ax.legend(loc="upper right")
+def plot_trajectory(ax, data: pd.DataFrame, fps: int):
+    """Plot trajectory data."""
+    # Get initial positions
+    x0 = data['X-Head'].iloc[0]
+    y0 = data['Y-Head'].iloc[0]
+    
+    # Plot head and tail trajectories
+    ax.plot(data['X-Head'], data['Y-Head'], 'b-', label='Head', alpha=0.7)
+    ax.plot(data['X-Tail'], data['Y-Tail'], 'r-', label='Tail', alpha=0.7)
+    
+    # Plot start points
+    ax.plot(x0, y0, 'go', label='Start')
+    
+    # Set labels and title
+    ax.set_xlabel('X Position (mm)')
+    ax.set_ylabel('Y Position (mm)')
+    ax.set_title('Trajectory')
+    ax.legend()
+    ax.grid(True)
 
 
 def plot_stacked_trajectories(ax : plt.Axes, dfs : list[pd.DataFrame],
@@ -270,32 +222,29 @@ def get_kernel_density_estimate(data : np.ndarray, span : tuple[float,float], re
     return xvals, dens
 
 
-def kernel_density_estimate(ax: plt.axes, data : np.ndarray | list[np.ndarray], span : tuple[float,float],
-                   ylim : tuple[float,float] | None = None, labels : list[str] | None = None,
-                   **kwargs) -> None:
-    '''
-    Plot the kernel density estimate of the input data
-
-    ax: plotting axis
-    data: one or a list of multiple 1D arrays of values
-    span: expected range / range of interest for the data
-    ylim: y-limits of axis
-    labels: labels for different vectors
-    kwargs: additional optional arguments for plotting.get_kernel_density()
-    '''
-    # convert single argument to list
-    if type(data) is not list : data = [data]
-
-    # calculate and plot kernel density for each data vector
-    for i, vec in enumerate(data):
-        xvals, kde = get_kernel_density_estimate(vec,span,**kwargs)
-        label = '' if labels is None else labels[i]
-        ax.plot(xvals,kde,linestyle="-",label=label)
-
-    # finish
-    ax.set_xlim(*span)
-    if ylim is not None : ax.set_ylim(ylim)
-    if labels is not None : ax.legend()
+def kernel_density_estimate(ax, data: np.ndarray, xlabel: str, label: str):
+    """Plot kernel density estimate of data.
+    
+    Args:
+        ax: Matplotlib axis
+        data: Data to plot
+        xlabel: X-axis label
+        label: Legend label
+    """
+    # Remove NaN values
+    data = data[~np.isnan(data)]
+    
+    # Calculate kernel density estimate
+    kde = gaussian_kde(data)
+    x_range = np.linspace(np.min(data), np.max(data), 100)
+    density = kde(x_range)
+    
+    # Plot
+    ax.plot(x_range, density, label=label)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Density')
+    ax.legend()
+    ax.grid(True)
 
 
 def histogram(ax : plt.Axes, data : np.ndarray, span : tuple, nbins : int = 100,
@@ -487,34 +436,44 @@ def generate_trajectory_plot(data: pd.DataFrame, fps: int,
         matplotlib Figure object
     """
     fig, ax = plt.subplots(figsize=(8, 8))
-    plot_trajectory(ax, data, fps, times, source, led_data)
+    plot_trajectory(ax, data, fps)
     return fig
 
-def generate_distribution_plot(data: pd.DataFrame, fps: int) -> plt.Figure:
-    """
-    Generate a plot of the position distributions.
+def generate_distribution_plot(data: pd.DataFrame, fps: int = 30) -> plt.Figure:
+    """Generate distribution plots of movement metrics."""
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
     
-    Args:
-        data: DataFrame containing position data
-        fps: Frame rate
-        
-    Returns:
-        matplotlib Figure object
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    # Plot position distributions
+    kernel_density_estimate(ax1, data['X-Head'].values,
+                          'X Position (mm)', 'Head')
+    kernel_density_estimate(ax1, data['X-Tail'].values,
+                          'X Position (mm)', 'Tail')
     
-    # Plot x-position distribution
-    kernel_density_estimate(ax1, data['xctr'].values, 
-                          span=(data['xctr'].min(), data['xctr'].max()))
-    ax1.set_title('X-position Distribution')
-    ax1.set_xlabel('X Position (mm)')
+    kernel_density_estimate(ax2, data['Y-Head'].values,
+                          'Y Position (mm)', 'Head')
+    kernel_density_estimate(ax2, data['Y-Tail'].values,
+                          'Y Position (mm)', 'Tail')
     
-    # Plot y-position distribution
-    kernel_density_estimate(ax2, data['yctr'].values,
-                          span=(data['yctr'].min(), data['yctr'].max()))
-    ax2.set_title('Y-position Distribution')
-    ax2.set_xlabel('Y Position (mm)')
+    # Calculate and plot speed distributions
+    head_speed = metrics.get_speed_from_df(data, 'head', fps)
+    tail_speed = metrics.get_speed_from_df(data, 'tail', fps)
     
+    kernel_density_estimate(ax3, head_speed,
+                          'Speed (mm/s)', 'Head')
+    kernel_density_estimate(ax3, tail_speed,
+                          'Speed (mm/s)', 'Tail')
+    
+    # Calculate and plot acceleration distributions
+    head_acc = np.diff(head_speed) * fps
+    tail_acc = np.diff(tail_speed) * fps
+    
+    kernel_density_estimate(ax4, head_acc,
+                          'Acceleration (mm/s²)', 'Head')
+    kernel_density_estimate(ax4, tail_acc,
+                          'Acceleration (mm/s²)', 'Tail')
+    
+    fig.suptitle('Movement Metric Distributions')
+    fig.tight_layout()
     return fig
 
 def generate_flag_plot(data: pd.DataFrame, flags: dict) -> plt.Figure:
