@@ -8,7 +8,7 @@ import numpy as np
 import os
 from typing import Optional, Tuple
 
-from pivr_analysis_pipeline.swap_corrector import (
+from swap_corrector import (
     plotting, utils, metrics,
     tracking_correction as tc,
     pivr_loader as loader,
