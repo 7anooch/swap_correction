@@ -1,55 +1,12 @@
 import numpy as np
 import pandas as pd
-import os
 import scipy as sp
-from swap_corrector.legacy import utils, metrics
-from swap_corrector.legacy import pivr_loader as loader
-from swap_corrector.legacy.kalman_filter import KalmanFilter
+from pivr_tools import utils, metrics
+from pivr_tools.kalman_filter import KalmanFilter
 
 # Parameters
 OVERLAP_THRESH = 0 # maximum distance between overlapping points
 
-# Column mappings
-POSDICT = {
-    'head': ('xhead', 'yhead'),
-    'tail': ('xtail', 'ytail'),
-    'ctr': ('xctr', 'yctr'),
-    'mid': ('xmid', 'ymid')
-}
-
-# Alternative column names (for backward compatibility)
-ALT_POSDICT = {
-    'head': ('X-Head', 'Y-Head'),
-    'tail': ('X-Tail', 'Y-Tail'),
-    'ctr': ('X-Centroid', 'Y-Centroid'),
-    'mid': ('X-Midpoint', 'Y-Midpoint')
-}
-
-def normalize_column_names(data: pd.DataFrame) -> pd.DataFrame:
-    """Normalize column names to lowercase format.
-    
-    Args:
-        data: DataFrame with position columns
-        
-    Returns:
-        DataFrame with normalized column names
-    """
-    data = data.copy()
-    
-    # Define column mappings
-    column_mapping = {
-        'X-Head': 'xhead', 'Y-Head': 'yhead',
-        'X-Tail': 'xtail', 'Y-Tail': 'ytail',
-        'X-Centroid': 'xctr', 'Y-Centroid': 'yctr',
-        'X-Midpoint': 'xmid', 'Y-Midpoint': 'ymid'
-    }
-    
-    # Only rename columns that exist
-    existing_cols = {k: v for k, v in column_mapping.items() if k in data.columns}
-    if existing_cols:
-        data = data.rename(columns=existing_cols)
-    
-    return data
 
 # ----- Tracking Correction -----
 
@@ -67,9 +24,6 @@ def tracking_correction(data : pd.DataFrame, fps : int, swapCorrection : bool = 
     filterData (bool): apply a Savitzky-Golay filter to the position data
     debug (bool): print debug messages
     """
-    # Normalize column names
-    data = normalize_column_names(data)
-    
     # correct tracking errors
     data = remove_edge_frames(data,debug=debug)
     if swapCorrection : data = correct_tracking_errors(data,debug=debug)

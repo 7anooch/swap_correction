@@ -7,7 +7,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import KernelDensity
 from scipy import stats, signal
-from pivr_analysis_pipeline.swap_corrector import utils
+from pivr_tools import utils
 import warnings
 
 

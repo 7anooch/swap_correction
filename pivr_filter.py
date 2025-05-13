@@ -2,9 +2,9 @@ import tkinter.filedialog as fd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from pivr_analysis_pipeline.swap_corrector import plotting, utils, metrics
-from pivr_analysis_pipeline.swap_corrector import tracking_correction as tc
-from pivr_analysis_pipeline.swap_corrector import pivr_loader as loader
+from pivr_tools import plotting, utils, metrics
+from pivr_tools import tracking_correction as tc
+from pivr_tools import pivr_loader as loader
 
 
 FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
@@ -17,7 +17,7 @@ FILTER_DATA = False # filter data before exporting (not recommended)
 
 DEBUG = False # print debug messages
 DIAGNOSTIC_PLOTS = True # generate and save diagnostic figures
-SHOW_PLOTS = False # display diagnostic figures after saving (if generated)
+SHOW_PLOTS = True # display diagnostic figures after saving (if generated)
 TIMES = None#(200,230) # start and end times to show on plots (None -> show entire trajectory)
 
 
