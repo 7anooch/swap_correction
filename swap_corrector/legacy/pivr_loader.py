@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 import json
-from pivr_analysis_pipeline.swap_corrector import utils
+from swap_corrector.legacy import utils
 
 
 # ----- Static Parameters -----

@@ -208,7 +208,14 @@ def test_invert_ranges():
     ranges = [(1, 2), (5, 7)]
     inverted = invert_ranges(ranges, 10)
     assert len(inverted) == 3
-    assert all(x in inverted for x in [(0, 0), (3, 4), (8, 9)])
+    assert (0, 0) in inverted
+    assert (3, 4) in inverted
+    assert (8, 9) in inverted
+    
+    # Test edge cases
+    assert invert_ranges([], 5) == [(0, 4)]  # Empty ranges
+    assert invert_ranges([(0, 4)], 5) == []  # Full range
+    assert invert_ranges([(1, 1)], 3) == [(0, 0), (2, 2)]  # Single point
 
 def test_fuse_ranges():
     """Test fusing ranges."""

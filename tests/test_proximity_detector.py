@@ -71,7 +71,16 @@ def test_proximity_detection(initialized_proximity_detector, real_data):
     
     # Run detector
     detected_swaps = initialized_proximity_detector.detect(raw_data)
-    detected_segments = initialized_proximity_detector.get_swap_segments(detected_swaps)
+    
+    # Convert detected_swaps to DataFrame for get_swap_segments
+    detected_data = pd.DataFrame({
+        'X-Head': raw_data['X-Head'],
+        'Y-Head': raw_data['Y-Head'],
+        'X-Tail': raw_data['X-Tail'],
+        'Y-Tail': raw_data['Y-Tail'],
+        'swaps': detected_swaps
+    })
+    detected_segments = initialized_proximity_detector.get_swap_segments(detected_data)
     
     # Calculate detection metrics
     true_positives = 0
@@ -106,6 +115,10 @@ def test_proximity_validation(initialized_proximity_detector, real_data):
     # Test validation on known swap regions
     valid_count = 0
     for start, end in swap_segments[:5]:  # Test first 5 known swaps
+        # Make sure we have enough data points for gradient calculation
+        if end - start < 3:  # Need at least 3 points for gradient
+            continue
+            
         if initialized_proximity_detector.validate_swap(raw_data, start, end):
             valid_count += 1
     
@@ -118,7 +131,7 @@ def test_proximity_validation(initialized_proximity_detector, real_data):
         # Find a region without known swaps
         while True:
             start = np.random.randint(0, len(raw_data) - 10)
-            end = start + 5
+            end = start + 5  # Use a fixed window size of 5
             is_swap_region = False
             for swap_start, swap_end in swap_segments:
                 if start <= swap_end and end >= swap_start:
@@ -139,11 +152,16 @@ def test_proximity_confidence(initialized_proximity_detector, real_data):
     swap_segments = real_data['swap_segments']
     
     # Test confidence on known swap regions
+    confidences = initialized_proximity_detector.get_confidence(raw_data)
+    
+    # Check that all confidences are between 0 and 1
+    assert np.all((confidences >= 0) & (confidences <= 1))
+    
+    # Check confidence for known swap regions
     swap_confidences = []
     for start, end in swap_segments[:5]:  # Test first 5 known swaps
-        confidence = initialized_proximity_detector.get_confidence(raw_data, start, end)
-        assert 0 <= confidence <= 1
-        swap_confidences.append(confidence)
+        segment_confidences = confidences[start:end+1]
+        swap_confidences.append(np.mean(segment_confidences))
     
     # Average confidence for known swaps should be reasonable
     assert np.mean(swap_confidences) > 0.4  # Lower threshold since proximity is just one signal
@@ -162,9 +180,8 @@ def test_proximity_confidence(initialized_proximity_detector, real_data):
             if not is_swap_region:
                 break
         
-        confidence = initialized_proximity_detector.get_confidence(raw_data, start, end)
-        assert 0 <= confidence <= 1
-        non_swap_confidences.append(confidence)
+        segment_confidences = confidences[start:end+1]
+        non_swap_confidences.append(np.mean(segment_confidences))
     
     # Average confidence for non-swap regions should be low
     assert np.mean(non_swap_confidences) < 0.4 

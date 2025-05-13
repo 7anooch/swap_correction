@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Make incremental, rather than large and sweeping, changes whenever you do anything. Many small incremental steps will help us stay on track of things and catch errors faster, leading to faster progress in the long run.

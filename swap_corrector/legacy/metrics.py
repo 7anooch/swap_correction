@@ -1,13 +1,22 @@
 import numpy as np
 import pandas as pd
-from pivr_analysis_pipeline.swap_corrector import utils
+from swap_corrector.legacy import utils
 
 
+# Position column mappings
 POSDICT = {
     'head' : ('xhead','yhead'),
     'tail' : ('xtail','ytail'),
     'ctr' : ('xctr','yctr'),
     'mid' : ('xmid','ymid')
+}
+
+# Alternative column names (for backward compatibility)
+ALT_POSDICT = {
+    'head': ('X-Head', 'Y-Head'),
+    'tail': ('X-Tail', 'Y-Tail'),
+    'ctr': ('X-Centroid', 'Y-Centroid'),
+    'mid': ('X-Midpoint', 'Y-Midpoint')
 }
 
 
@@ -19,9 +28,22 @@ def vectors_from_key(data : pd.DataFrame, key : str, transpose : bool = True) ->
     key: key for feature of interest
     transpose : apply transpose such that x, y vectors can be unpacked directly
     """
+    if key not in POSDICT:
+        raise ValueError(f"Invalid key: {key}")
+        
+    # Try lowercase columns first
     kx, ky = POSDICT[key]
-    vec = data.loc[:,[kx,ky]].to_numpy()
-    return vec.T if transpose else vec
+    if kx in data.columns and ky in data.columns:
+        vec = data.loc[:, [kx, ky]].to_numpy()
+        return vec.T if transpose else vec
+        
+    # Try uppercase columns with hyphens
+    kx, ky = ALT_POSDICT[key]
+    if kx in data.columns and ky in data.columns:
+        vec = data.loc[:, [kx, ky]].to_numpy()
+        return vec.T if transpose else vec
+        
+    raise ValueError(f"Could not find columns for key {key} in data")
 
 
 def detect_stops_via_threshold(spd : np.ndarray, minSpeed : float,
@@ -98,9 +120,37 @@ def get_df_bounds(dfs : list[pd.DataFrame], cols : list[str], buffer : float = 0
 
 
 def get_speed_from_df(data : pd.DataFrame, key : str, fps : int = 1, npoints : int = 2) -> np.ndarray:
-    '''get speed based on x, y position data in dataframe'''
-    x, y = vectors_from_key(data,key)
-    return utils.get_speed(x, y, fps, npoints)
+    """Calculate speed from position data.
+    
+    Args:
+        data: DataFrame with position columns
+        key: Point to calculate speed for ('head', 'tail', etc.)
+        fps: Frame rate
+        
+    Returns:
+        Speed values
+    """
+    if key not in POSDICT:
+        raise ValueError(f"Invalid key: {key}")
+        
+    # Try lowercase columns first
+    kx, ky = POSDICT[key]
+    if kx in data.columns and ky in data.columns:
+        x = data[kx].values
+        y = data[ky].values
+    else:
+        # Try uppercase columns with hyphens
+        kx, ky = ALT_POSDICT[key]
+        if kx in data.columns and ky in data.columns:
+            x = data[kx].values
+            y = data[ky].values
+        else:
+            raise ValueError(f"Could not find columns for key {key} in data")
+    
+    dx = np.diff(x)
+    dy = np.diff(y)
+    speed = np.sqrt(dx*dx + dy*dy) * fps
+    return np.concatenate([[0], speed])  # Add 0 for first frame
 
 
 def get_dist_from_df(data : pd.DataFrame, key : str, origin : tuple[float] = (0,0)) -> np.ndarray:
@@ -119,19 +169,37 @@ def get_event_vector(data : pd.DataFrame, col = 'duration', stop : bool = True) 
 # ----- Angle Calculations -----
 
 def get_head_angle(data : pd.DataFrame, halfAngle : bool = False) -> np.ndarray:
-    '''
-    Returns the internal angle of the animal in radians
-    (angle of midpt-head vector relative to tail-midpt vector)
-
-    data (pd.DataFrame): source dataframe
-    halfAngle (bool): if true, return the half-angle on [0,pi]; otherwise, return the full angle on [-pi,pi]
-    '''
-    npts = data.shape[0]
-    u = get_vectors_between(data,'mid','head') # midpt-head
-    v = get_vectors_between(data,'tail','mid') # tail-midpt
-
-    ha = [utils.get_angle(v[i],u[i],halfAngle=halfAngle) for i in range(npts)]
-    return np.array(ha)
+    """Calculate head angle relative to body axis.
+    
+    Args:
+        data: DataFrame with position columns
+        
+    Returns:
+        Array of angles in radians
+    """
+    # Try lowercase columns first
+    if all(col in data.columns for col in ['xhead', 'yhead', 'xtail', 'ytail']):
+        x_head = data['xhead'].values
+        y_head = data['yhead'].values
+        x_tail = data['xtail'].values
+        y_tail = data['ytail'].values
+    else:
+        # Try uppercase columns with hyphens
+        if all(col in data.columns for col in ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail']):
+            x_head = data['X-Head'].values
+            y_head = data['Y-Head'].values
+            x_tail = data['X-Tail'].values
+            y_tail = data['Y-Tail'].values
+        else:
+            raise ValueError("Could not find head/tail position columns in data")
+    
+    # Calculate vectors
+    dx = x_head - x_tail
+    dy = y_head - y_tail
+    
+    # Calculate angles
+    angles = np.arctan2(dy, dx)
+    return angles
 
 
 def get_orientation(data : pd.DataFrame, ref : list[float] = [1,0],
@@ -177,12 +245,33 @@ def get_bearing(data : pd.DataFrame, source : list[float] = [0,0],
 
 
 def get_ht_cross_sign(data : pd.DataFrame) -> np.ndarray:
+    """Calculate the cross sign between head and tail.
+    
+    Args:
+        data: DataFrame with position columns
+        
+    Returns:
+        Array of cross signs
     """
-    Returns the signs of the z-components of the cross-products between tail-midpt and midpt-head vectors
-    """
-    u = get_orientation_vectors(data,True) # midpt-head
-    v = get_orientation_vectors(data,False) # tail-midpt
-    return utils.get_cross_sign(v,u)
+    # Try lowercase columns first
+    if all(col in data.columns for col in ['xhead', 'yhead', 'xtail', 'ytail']):
+        x_head = data['xhead'].values
+        y_head = data['yhead'].values
+        x_tail = data['xtail'].values
+        y_tail = data['ytail'].values
+    else:
+        # Try uppercase columns with hyphens
+        if all(col in data.columns for col in ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail']):
+            x_head = data['X-Head'].values
+            y_head = data['Y-Head'].values
+            x_tail = data['X-Tail'].values
+            y_tail = data['Y-Tail'].values
+        else:
+            raise ValueError("Could not find head/tail position columns in data")
+    
+    # Calculate cross sign
+    cross_sign = (x_head - x_tail) * (y_head + y_tail)
+    return cross_sign
 
 
 def get_orientation_vectors(data : pd.DataFrame, head : bool = False, fromMotion : bool = False) -> np.ndarray:
@@ -335,44 +424,93 @@ def get_segment_distance(data : pd.DataFrame, segments : np.ndarray, key : str =
 
 def get_delta_between_frames(data : pd.DataFrame,
             key1 : str, key2 : str | None = None, fps : int = 1) -> np.ndarray:
-    '''
-    Get delta from (x1,y1) to (x2,y2) between frames
-    Note: not recommended for speed calculations; use get_speed_from_df() instead
-    '''
+    """Calculate distance between consecutive frames for a point.
+    
+    Args:
+        data: DataFrame with position columns
+        key1: Point to calculate for ('head', 'tail', etc.)
+        key2: Second point
+        fps: Frame rate
+        
+    Returns:
+        Array of distances
+    """
     if not key2 : key2 = key1 # calculate delta for same point if nosecond point specified
     x1, y1 = vectors_from_key(data,key1)
     x2, y2 = vectors_from_key(data,key2)
     npts = data.shape[0]
 
-    vx = x2[1:] - x1[:npts-1]
-    vy = y2[1:] - y1[:npts-1]
-    delta = np.sqrt(vx**2 + vy**2) * fps
-    return delta
+    dx = x2[1:] - x1[:npts-1]
+    dy = y2[1:] - y1[:npts-1]
+    delta = np.sqrt(dx**2 + dy**2)
+    if isinstance(fps, (int, float)):
+        delta *= fps
+    return np.concatenate([[0], delta])  # Add 0 for first frame
 
 
-def get_delta_in_frame(data : pd.DataFrame, key1 : str, key2 : str) -> np.ndarray:
-    '''get distance from (x1,y1) to (x2,y2) each frame'''
-    x1, y1 = vectors_from_key(data,key1)
-    x2, y2 = vectors_from_key(data,key2)
+def get_delta_in_frame(data : pd.DataFrame, pt1 : str, pt2 : str) -> np.ndarray:
+    """Calculate distance between two points in each frame.
+    
+    Args:
+        data: DataFrame with position columns
+        pt1: First point ('head', 'tail', etc.)
+        pt2: Second point
+        
+    Returns:
+        Array of distances
+    """
+    if pt1 not in POSDICT or pt2 not in POSDICT:
+        raise ValueError(f"Invalid points: {pt1}, {pt2}")
+        
+    # Try lowercase columns first
+    x1, y1 = POSDICT[pt1]
+    x2, y2 = POSDICT[pt2]
+    if all(col in data.columns for col in [x1, y1, x2, y2]):
+        dx = data[x1] - data[x2]
+        dy = data[y1] - data[y2]
+    else:
+        # Try uppercase columns with hyphens
+        x1, y1 = ALT_POSDICT[pt1]
+        x2, y2 = ALT_POSDICT[pt2]
+        if all(col in data.columns for col in [x1, y1, x2, y2]):
+            dx = data[x1] - data[x2]
+            dy = data[y1] - data[y2]
+        else:
+            raise ValueError(f"Could not find columns for points {pt1}, {pt2} in data")
+    
+    return np.sqrt(dx*dx + dy*dy)
 
-    dist = np.sqrt((x2-x1)**2 + (y2-y1)**2)
-    return dist
 
-
-def perfectly_overlapping(data : pd.DataFrame, key1 : str, key2 : str, where : bool = True) -> np.ndarray:
-    '''
-    Check if two points perfectly overlap in frame (faster than get_delta_in_frame)
-
-    data: position data
-    key1, key2: keys of points of interest
-    where: return frames where overlaps occur instead of boolean array
-    '''
-    x1, y1 = vectors_from_key(data,key1)
-    x2, y2 = vectors_from_key(data,key2)
-
-    query = np.logical_and(x2 == x1, y2 == y1)
-    if where : return np.where(query)[0]
-    else : return query
+def perfectly_overlapping(data : pd.DataFrame, pt1 : str, pt2 : str, where : bool = False) -> np.ndarray:
+    """Find frames where two points perfectly overlap.
+    
+    Args:
+        data: DataFrame with position columns
+        pt1: First point ('head', 'tail', etc.)
+        pt2: Second point
+        where: Return indices where True if True, else boolean array
+        
+    Returns:
+        Boolean array or indices where points overlap
+    """
+    if pt1 not in POSDICT or pt2 not in POSDICT:
+        raise ValueError(f"Invalid points: {pt1}, {pt2}")
+        
+    # Try lowercase columns first
+    x1, y1 = POSDICT[pt1]
+    x2, y2 = POSDICT[pt2]
+    if all(col in data.columns for col in [x1, y1, x2, y2]):
+        overlaps = (data[x1] == data[x2]) & (data[y1] == data[y2])
+    else:
+        # Try uppercase columns with hyphens
+        x1, y1 = ALT_POSDICT[pt1]
+        x2, y2 = ALT_POSDICT[pt2]
+        if all(col in data.columns for col in [x1, y1, x2, y2]):
+            overlaps = (data[x1] == data[x2]) & (data[y1] == data[y2])
+        else:
+            raise ValueError(f"Could not find columns for points {pt1}, {pt2} in data")
+    
+    return np.where(overlaps)[0] if where else overlaps
 
 
 def get_cross_segment_deltas(data : pd.DataFrame, segments : np.ndarray,

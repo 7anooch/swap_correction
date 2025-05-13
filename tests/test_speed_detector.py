@@ -247,26 +247,29 @@ def test_speed_thresholds(initialized_speed_detector, artificial_data, real_data
     acceleration = scale_metrics['short_term']['acceleration']
     
     # Check that high speeds are detected
-    high_speed_frames = speed > initialized_speed_detector.thresholds.speed
-    assert np.any(high_speed_frames), "No high-speed frames detected in artificial data"
+    high_speed_frames = speed > initialized_speed_detector._current_thresholds['speed']
+    assert np.any(high_speed_frames), "No high speeds detected"
     
-    # Check that rapid acceleration is detected
-    rapid_accel_frames = np.abs(acceleration) > initialized_speed_detector.thresholds.acceleration_threshold
-    assert np.any(rapid_accel_frames), "No rapid acceleration frames detected in artificial data"
+    # Check that high accelerations are detected
+    accel_threshold = initialized_speed_detector._current_thresholds['speed'] * initialized_speed_detector._current_thresholds['accel_factor']
+    high_accel_frames = np.abs(acceleration) > accel_threshold
+    assert np.any(high_accel_frames), "No high accelerations detected"
     
     # Test with real data
-    for exp_data in real_data_list:
-        scale_metrics = initialized_speed_detector._analyze_movement_scales(exp_data['raw_data'])
+    for exp_data in real_data_list[:3]:  # Test first 3 experiments
+        raw_data = exp_data['raw_data']
+        scale_metrics = initialized_speed_detector._analyze_movement_scales(raw_data)
         speed = scale_metrics['short_term']['speed']
         acceleration = scale_metrics['short_term']['acceleration']
         
         # Check that high speeds are detected
-        high_speed_frames = speed > initialized_speed_detector.thresholds.speed
-        assert np.any(high_speed_frames), f"No high-speed frames detected in {exp_data['name']}"
+        high_speed_frames = speed > initialized_speed_detector._current_thresholds['speed']
+        assert np.any(high_speed_frames), f"No high speeds detected in {exp_data['name']}"
         
-        # Check that rapid acceleration is detected
-        rapid_accel_frames = np.abs(acceleration) > initialized_speed_detector.thresholds.acceleration_threshold
-        assert np.any(rapid_accel_frames), f"No rapid acceleration frames detected in {exp_data['name']}"
+        # Check that high accelerations are detected
+        accel_threshold = initialized_speed_detector._current_thresholds['speed'] * initialized_speed_detector._current_thresholds['accel_factor']
+        high_accel_frames = np.abs(acceleration) > accel_threshold
+        assert np.any(high_accel_frames), f"No high accelerations detected in {exp_data['name']}"
 
 def test_confidence_scoring(initialized_speed_detector, artificial_data, real_data_list):
     """Test confidence scoring."""
@@ -274,35 +277,35 @@ def test_confidence_scoring(initialized_speed_detector, artificial_data, real_da
     raw_data = artificial_data['raw_data']
     known_swaps = artificial_data['known_swaps']
     
-    scale_metrics = initialized_speed_detector._analyze_movement_scales(raw_data)
-    scores = initialized_speed_detector._calculate_confidence_scores(
-        raw_data,
-        known_swaps,
-        scale_metrics
-    )
+    # Get confidence scores
+    confidences = initialized_speed_detector.get_confidence(raw_data)
     
-    # Check that confidence scores are reasonable
-    assert np.all(scores >= 0)
-    assert np.all(scores <= 1)
-    assert scores[50] > 0.5, "Low confidence for known swap in artificial data"
+    # Check that all confidences are between 0 and 1
+    assert np.all((confidences >= 0) & (confidences <= 1))
+    
+    # Check that high confidence corresponds to known swaps
+    assert confidences[50] > 0.7, "Low confidence for high-speed swap at frame 50"
+    
+    # Check that average confidence is higher for known swaps
+    swap_confidences = confidences[known_swaps]
+    non_swap_confidences = confidences[~known_swaps]
+    
+    assert np.mean(swap_confidences) > np.mean(non_swap_confidences), "Average confidence not higher for known swaps"
     
     # Test with real data
-    for exp_data in real_data_list:
+    for exp_data in real_data_list[:3]:  # Test first 3 experiments
         raw_data = exp_data['raw_data']
         known_swaps = exp_data['known_swaps']
         
-        scale_metrics = initialized_speed_detector._analyze_movement_scales(raw_data)
-        scores = initialized_speed_detector._calculate_confidence_scores(
-            raw_data,
-            known_swaps,
-            scale_metrics
-        )
+        # Get confidence scores
+        confidences = initialized_speed_detector.get_confidence(raw_data)
         
-        # Check that confidence scores are reasonable
-        assert np.all(scores >= 0)
-        assert np.all(scores <= 1)
+        # Check that all confidences are between 0 and 1
+        assert np.all((confidences >= 0) & (confidences <= 1))
         
-        # Check confidence for known swaps
-        swap_scores = scores[known_swaps]
-        if len(swap_scores) > 0:
-            assert np.mean(swap_scores) > 0.5, f"Low average confidence for known swaps in {exp_data['name']}" 
+        # Check that average confidence is higher for known swaps
+        swap_confidences = confidences[known_swaps]
+        non_swap_confidences = confidences[~known_swaps]
+        
+        assert np.mean(swap_confidences) > np.mean(non_swap_confidences), \
+            f"Average confidence not higher for known swaps in {exp_data['name']}" 

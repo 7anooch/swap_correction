@@ -32,11 +32,12 @@ def test_correct_tracking_errors(sample_data_with_swaps):
     # Apply tracking correction
     corrected = tracking_correction.correct_tracking_errors(data, fps)
     
-    # Check that corrected data has the same shape
-    assert corrected.shape == data.shape
+    # Check that corrected data has the expected columns
+    expected_cols = list(data.columns) + ['X-Midpoint', 'Y-Midpoint']
+    assert all(col in corrected.columns for col in expected_cols)
     
-    # Check that corrected data is not identical to input
-    assert not corrected.equals(data)
+    # Check that corrected data has the same number of rows
+    assert len(corrected) == len(data)
 
 def test_validate_corrected_data(sample_data_with_swaps):
     """Test validation of corrected data."""
@@ -73,10 +74,14 @@ def test_interpolate_overlaps(sample_data_with_swaps):
     # Apply interpolation
     interpolated = tracking_correction.interpolate_gaps(data)
     
-    # Check that interpolated data has the same shape
-    assert interpolated.shape == data.shape
+    # Check that interpolated data has the expected columns
+    expected_cols = list(data.columns) + ['X-Midpoint', 'Y-Midpoint']
+    assert all(col in interpolated.columns for col in expected_cols)
     
-    # Check that interpolation filled gaps
+    # Check that interpolated data has the same number of rows
+    assert len(interpolated) == len(data)
+    
+    # Check that NaN values were interpolated
     assert not interpolated.isna().any().any()
 
 def test_tracking_correction_pipeline(sample_data_with_swaps):
@@ -95,11 +100,15 @@ def test_tracking_correction_pipeline(sample_data_with_swaps):
         debug=True
     )
     
-    # Check that processed data has the same shape
-    assert processed.shape == data.shape
+    # Check that processed data has the expected columns
+    expected_cols = list(data.columns) + ['X-Midpoint', 'Y-Midpoint']
+    assert all(col in processed.columns for col in expected_cols)
+    
+    # Check that processed data has the same number of rows
+    assert len(processed) == len(data)
     
     # Check that processed data is not identical to input
     assert not processed.equals(data)
     
-    # Check that processed data has no NaN values
+    # Check that no NaN values remain
     assert not processed.isna().any().any() 

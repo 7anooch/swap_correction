@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import warnings
+from typing import List, Tuple
 
 
 # ----- File System Shortcuts -----
@@ -196,30 +197,39 @@ def ranges_to_edges(swapRanges) -> np.ndarray:
     return merge(swaps[:,0],swaps[:,1]+1)
 
 
-def invert_ranges(ranges : list[tuple[int,int]], length : int, inclusive : bool = False) -> np.ndarray:
+def invert_ranges(ranges: List[Tuple[int, int]], length: int) -> List[Tuple[int, int]]:
+    """Invert a list of ranges.
+    
+    Args:
+        ranges: List of (start, end) tuples
+        length: Length of sequence
+        
+    Returns:
+        List of inverted ranges
     """
-    Invert a list of index ranges
-    Ex: [(1,2),(5,7)], 10, False -> [[0,0],[3,4],[8,9]]
-    Ex: [(1,2),(5,7)], 10, True -> [[0,1],[2,5],[7,9]]
-
-    ranges: intial list of index ranges
-    length: length of indexed vector
-    inclusive: include original indices
-    """
-    # catch case of empty input
-    rangeArray = np.array(ranges)
-    if rangeArray.shape[0] == 0 : return np.array([(0,length)])
-
-    # invert ranges
-    delta = 0 if inclusive else 1
-    start, end = rangeArray.T
-    inverted = list(zip(end[:-1]+delta,start[1:]-delta))
-
-    # catch edge cases
-    if start[0] > 0 : inverted.insert(0,(0,start[0]-delta)) # first edge case; append to front of list
-    if end[-1] < length-1 : inverted.append((end[-1]+delta,length-1)) # last edge case
-
-    return np.array(inverted)
+    if not ranges:
+        return [(0, length - 1)]
+        
+    # Sort ranges by start index
+    ranges = sorted(ranges)
+    
+    # Initialize inverted ranges
+    inverted = []
+    
+    # Add range before first range
+    if ranges[0][0] > 0:
+        inverted.append((0, ranges[0][0] - 1))
+    
+    # Add ranges between ranges
+    for i in range(len(ranges) - 1):
+        if ranges[i][1] + 1 < ranges[i + 1][0]:
+            inverted.append((ranges[i][1] + 1, ranges[i + 1][0] - 1))
+    
+    # Add range after last range
+    if ranges[-1][1] < length - 1:
+        inverted.append((ranges[-1][1] + 1, length - 1))
+    
+    return inverted
 
 
 def fuse_ranges(*ranges : list[tuple[int,int]] | np.ndarray, inclusive : bool = True) -> np.ndarray:
@@ -393,20 +403,23 @@ def indices_to_segments(idxs : list[int], nframes : int = -1, addBounds : bool =
 
 
 def metrics_by_segment(data : np.ndarray, segs : np.ndarray, buffer : int = 0) -> np.ndarray:
+    """Calculate statistics of value within each segment defined by the input flags.
+    
+    Args:
+        data: Vector of interest
+        segs: Segments of interest
+        buffer: Size of buffer at edges of segment to reduce edge artifacts
+        
+    Returns:
+        N x 4 array of mean, std, median, count
     """
-    Calculate statistics of value within each segment defined by the input flags
-    Returns an N x 3 array of mean, std, median
-
-    data: vector of interet
-    segs: segments of interest
-    buffer: size of buffer at edges of segment to reduce edge artifacts
-    """
-    with warnings.catch_warnings(): # suppress "mean, etc of empty slice"
+    with warnings.catch_warnings():  # suppress "mean, etc of empty slice"
         warnings.simplefilter("ignore", category=RuntimeWarning)
         avg = [np.nanmean(data[a+buffer:b-buffer]) for a, b in segs]
         std = [np.nanstd(data[a+buffer:b-buffer]) for a, b in segs]
         med = [np.nanmedian(data[a+buffer:b-buffer]) for a, b in segs]
-    return np.array(list(zip(avg,std,med)))
+        cnt = [np.sum(~np.isnan(data[a+buffer:b-buffer])) for a, b in segs]
+    return np.array(list(zip(avg, std, med, cnt)))
 
 
 # ----- Geometry -----
@@ -565,3 +578,18 @@ def rolling_median(x : np.ndarray, w : int) -> np.ndarray:
     idx = np.arange(w//2, n-w//2)
     median = np.array([np.median(x[i-w//2:i+w//2+1]) for i in idx])
     return median
+
+
+def calculate_midpoints(data: pd.DataFrame) -> pd.DataFrame:
+    """Calculate midpoint columns from head and tail positions.
+    
+    Args:
+        data: DataFrame with X-Head, Y-Head, X-Tail, Y-Tail columns
+        
+    Returns:
+        DataFrame with added X-Midpoint and Y-Midpoint columns
+    """
+    data = data.copy()
+    data['X-Midpoint'] = (data['X-Head'] + data['X-Tail']) / 2
+    data['Y-Midpoint'] = (data['Y-Head'] + data['Y-Tail']) / 2
+    return data

@@ -59,7 +59,8 @@ def sample_data():
     data['X-Midpoint'] = (x_head + x_tail) / 2
     data['Y-Midpoint'] = (y_head + y_tail) / 2
     
-    return data
+    # Return tuple of (data, fps)
+    return data, 30  # 30 fps is a common frame rate
 
 @pytest.fixture
 def processor(config):
@@ -75,10 +76,10 @@ def initialized_processor(processor, sample_data):
     """Create an initialized processor instance."""
     data, fps = sample_data
     processor.config.fps = fps
+    processor.config.debug = True  # Ensure debug mode is active
     processor.metrics = MovementMetrics(data, fps)
     for detector in processor.detectors.values():
         detector.setup(data)
-        detector.metrics = processor.metrics
     return processor
 
 def test_processor_initialization(processor):
@@ -102,11 +103,10 @@ def test_detector_setup(processor, sample_data):
 def test_swap_detection(initialized_processor, sample_data):
     """Test swap detection."""
     data, _ = sample_data
-    # Process data
-    detector_results = initialized_processor._run_detectors(data)
-    
+    # Get segments per detector
+    segments_dict = initialized_processor.get_detector_segments(data)
     # Check that detectors found swaps
-    assert any(len(segments) > 0 for _, segments in detector_results.values())
+    assert any(len(segments) > 0 for segments in segments_dict.values())
 
 def test_detection_combination(initialized_processor, sample_data):
     """Test combination of detector results."""
@@ -157,10 +157,8 @@ def test_full_pipeline(processor, sample_data):
     """Test the complete processing pipeline."""
     # Process data
     corrected_data = processor.process(sample_data)
-    
     # Check that output has same shape as input
-    assert corrected_data.shape == sample_data.shape
-    
+    assert corrected_data.shape == sample_data[0].shape
     # Check that all required columns are present
     required_columns = [
         'X-Head', 'Y-Head',
@@ -168,7 +166,6 @@ def test_full_pipeline(processor, sample_data):
         'X-Midpoint', 'Y-Midpoint'
     ]
     assert all(col in corrected_data.columns for col in required_columns)
-    
     # Check that no NaN values were introduced
     assert not corrected_data.isna().any().any()
 

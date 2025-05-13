@@ -1,3 +1,7 @@
+"""
+Plotting utilities for swap correction pipeline.
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -13,77 +17,115 @@ import scipy.stats as sp
 from . import metrics
 from scipy.stats import gaussian_kde
 import scipy.ndimage as sp
+from typing import Optional, Tuple, Dict, Any, Union
 
+# Column name mappings
+COLUMN_MAPPINGS = {
+    'xhead': 'X-Head',
+    'yhead': 'Y-Head',
+    'xtail': 'X-Tail',
+    'ytail': 'Y-Tail',
+    'xctr': 'X-Center',
+    'yctr': 'Y-Center',
+    'speed': 'Speed',
+    'acceleration': 'Acceleration',
+    'curvature': 'Curvature'
+}
 
-def save_figure(fig, name : str, outputDir : str | None = None, show : bool = False, block : bool = False) -> None:
+def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize column names to standard format.
+    
+    Args:
+        df: Input DataFrame
+        
+    Returns:
+        DataFrame with normalized column names
     """
-    Save and/or display the current figure
+    df = df.copy()
+    for old_col, new_col in COLUMN_MAPPINGS.items():
+        if old_col in df.columns:
+            df[new_col] = df[old_col]
+            df = df.drop(columns=[old_col])
+    return df
 
-    name: name of file
-    outputDir: directory to save file to; if None, do not save
-    show: show plot after saving
-    block: figure will block script from continuing until closed
+def save_figure(fig, name: str, output_dir: str | None = None, show: bool = False, block: bool = False) -> None:
+    """Save and/or display the current figure.
+    
+    Args:
+        name: Name of file
+        output_dir: Directory to save file to; if None, do not save
+        show: Show plot after saving
+        block: Figure will block script from continuing until closed
     """
-    if outputDir is not None:
-        fileout = os.path.join(outputDir,name)
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        fileout = os.path.join(output_dir, name)
         plt.savefig(fileout)
-    if show : plt.show(block=block)
-    else : plt.close(fig)
+    if show:
+        plt.show(block=block)
+    else:
+        plt.close(fig)
 
-
-def plot_trajectory(ax, data: pd.DataFrame, fps: int):
-    """Plot trajectory data."""
-    # Get initial positions
-    x0 = data['X-Head'].iloc[0]
-    y0 = data['Y-Head'].iloc[0]
+def plot_trajectory(ax: plt.Axes, data: pd.DataFrame, fps: float) -> None:
+    """Plot trajectory with optional flags.
     
-    # Plot head and tail trajectories
-    ax.plot(data['X-Head'], data['Y-Head'], 'b-', label='Head', alpha=0.7)
-    ax.plot(data['X-Tail'], data['Y-Tail'], 'r-', label='Tail', alpha=0.7)
+    Args:
+        ax: Axes to plot on
+        data: DataFrame with trajectory data
+        fps: Frames per second
+    """
+    # Plot head trajectory
+    ax.plot(data['X-Head'], data['Y-Head'], 'b-', alpha=0.5, label='Head')
     
-    # Plot start points
-    ax.plot(x0, y0, 'go', label='Start')
+    # Plot tail trajectory
+    ax.plot(data['X-Tail'], data['Y-Tail'], 'r-', alpha=0.5, label='Tail')
     
-    # Set labels and title
+    # Plot midpoints if available
+    if 'X-Midpoint' in data.columns and 'Y-Midpoint' in data.columns:
+        ax.plot(data['X-Midpoint'], data['Y-Midpoint'], 'g-', alpha=0.5, label='Midpoint')
+    
+    # Add labels
     ax.set_xlabel('X Position (mm)')
     ax.set_ylabel('Y Position (mm)')
-    ax.set_title('Trajectory')
     ax.legend()
-    ax.grid(True)
+    ax.set_aspect('equal')
 
-
-def plot_stacked_trajectories(ax : plt.Axes, dfs : list[pd.DataFrame],
-            timeSpectrum : bool = True, source : tuple[float,float] = (0,0),
-            ledData : np.ndarray | None = None) -> None:
+def plot_stacked_trajectories(ax: plt.Axes, dfs: list[pd.DataFrame],
+                            time_spectrum: bool = True, source: tuple[float,float] = (0,0),
+                            led_data: np.ndarray | None = None) -> None:
+    """Plot trajectories for all input samples on the same plot.
+    
+    Args:
+        ax: Figure axes
+        dfs: List of DataFrames to retrieve trajectories from
+        time_spectrum: If true, color-code time; otherwise, color-code samples
+        source: The coordinates [x,y] of the odor source
+        led_data: Array indicating LED activity
     """
-    Plot trajectories for all input samples on the same plot
-
-    ax: figure axes
-    dfs (list[pd.DataFrame]): a list of dataframes to retrieve trajectories from
-    timeSpectrum (bool): if true, color-code time; otherwise, color-code samples
-    source (list): the coordinates [x,y] of the odor source
-    ledData (np.ndarray): array indicating LED activity
-    """
-    # indicate led activity
-    if ledData is not None:
+    # Normalize column names for all DataFrames
+    dfs = [normalize_column_names(df) for df in dfs]
+    
+    # Indicate LED activity
+    if led_data is not None:
         for i, data in enumerate(dfs):
-            cols = _get_colors_from_LED(data['stimulus']) # in case data different lengths ...
-            ax.scatter(data['xctr'],data['yctr'],c=cols,s=0.1)
-    # indicate time with color gradient
-    elif timeSpectrum:
+            cols = _get_colors_from_LED(data['stimulus'])
+            ax.scatter(data['X-Center'], data['Y-Center'], c=cols, s=0.1)
+    # Indicate time with color gradient
+    elif time_spectrum:
         nframes = dfs[0].shape[0]
         cmap = plt.get_cmap('viridis')
-        cols = cmap(np.linspace(0,1,nframes)) # create a spectrum of colors across timepoints
-        cols = np.flip(cols,0) # make color-coding more intuitive
+        cols = cmap(np.linspace(0, 1, nframes))
+        cols = np.flip(cols, 0)
         for i, data in enumerate(dfs):
-            ax.scatter(data['xctr'],data['yctr'],c=cols,s=0.1)
-    # indicate samples sequentially with color gradient
+            ax.scatter(data['X-Center'], data['Y-Center'], c=cols, s=0.1)
+    # Indicate samples sequentially with color gradient
     else:
-        cols = cmap(np.linspace(0,1,len(dfs))) # create a spectrum of colors across samples
+        cmap = plt.get_cmap('viridis')
+        cols = cmap(np.linspace(0, 1, len(dfs)))
         for i, data in enumerate(dfs):
-            ax.plot(data['xctr'],data['yctr'],c=cols[i])
+            ax.plot(data['X-Center'], data['Y-Center'], c=cols[i])
     
-    ax.scatter(*source, c='b',marker='o',s=10)
+    ax.scatter(*source, c='b', marker='o', s=10)
     ax.set_title('Trajectories (mm)')
     ax.axis('square')
 
@@ -419,109 +461,211 @@ def report_data(ax, data : np.ndarray) -> None:
         verticalalignment='center', horizontalalignment='left',
         transform=ax.transAxes, fontsize=7)
 
-def generate_trajectory_plot(data: pd.DataFrame, fps: int, 
-                           times: tuple = None, source: tuple = (0, 0),
-                           led_data: np.ndarray = None) -> plt.Figure:
-    """
-    Generate a plot of the trajectory.
+def generate_trajectory_plot(data: pd.DataFrame, fps: float = 30.0) -> plt.Figure:
+    """Generate a plot of the trajectory.
     
     Args:
-        data: DataFrame containing position data
-        fps: Frame rate
-        times: Optional tuple of (start_time, end_time)
-        source: Tuple of (x, y) coordinates for the source
-        led_data: Optional array of LED activity data
+        data: DataFrame with trajectory data
+        fps: Frames per second
         
     Returns:
-        matplotlib Figure object
+        Figure object
     """
-    fig, ax = plt.subplots(figsize=(8, 8))
-    plot_trajectory(ax, data, fps)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Plot head trajectory
+    ax.plot(data['X-Head'], data['Y-Head'], 'b-', label='Head', alpha=0.7)
+    ax.plot(data['X-Head'].iloc[0], data['Y-Head'].iloc[0], 'bo', label='Head Start')
+    ax.plot(data['X-Head'].iloc[-1], data['Y-Head'].iloc[-1], 'b*', label='Head End')
+    
+    # Plot tail trajectory
+    ax.plot(data['X-Tail'], data['Y-Tail'], 'r-', label='Tail', alpha=0.7)
+    ax.plot(data['X-Tail'].iloc[0], data['Y-Tail'].iloc[0], 'ro', label='Tail Start')
+    ax.plot(data['X-Tail'].iloc[-1], data['Y-Tail'].iloc[-1], 'r*', label='Tail End')
+    
+    # Plot midpoint trajectory if available
+    if 'X-Mid' in data.columns and 'Y-Mid' in data.columns:
+        ax.plot(data['X-Mid'], data['Y-Mid'], 'g--', label='Midpoint', alpha=0.5)
+    
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.set_title('Trajectory Plot')
+    ax.legend()
+    ax.grid(True)
+    
     return fig
 
-def generate_distribution_plot(data: pd.DataFrame, fps: int = 30) -> plt.Figure:
-    """Generate distribution plots of movement metrics."""
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
-    
-    # Plot position distributions
-    kernel_density_estimate(ax1, data['X-Head'].values,
-                          'X Position (mm)', 'Head')
-    kernel_density_estimate(ax1, data['X-Tail'].values,
-                          'X Position (mm)', 'Tail')
-    
-    kernel_density_estimate(ax2, data['Y-Head'].values,
-                          'Y Position (mm)', 'Head')
-    kernel_density_estimate(ax2, data['Y-Tail'].values,
-                          'Y Position (mm)', 'Tail')
-    
-    # Calculate and plot speed distributions
-    head_speed = metrics.get_speed_from_df(data, 'head', fps)
-    tail_speed = metrics.get_speed_from_df(data, 'tail', fps)
-    
-    kernel_density_estimate(ax3, head_speed,
-                          'Speed (mm/s)', 'Head')
-    kernel_density_estimate(ax3, tail_speed,
-                          'Speed (mm/s)', 'Tail')
-    
-    # Calculate and plot acceleration distributions
-    head_acc = np.diff(head_speed) * fps
-    tail_acc = np.diff(tail_speed) * fps
-    
-    kernel_density_estimate(ax4, head_acc,
-                          'Acceleration (mm/s²)', 'Head')
-    kernel_density_estimate(ax4, tail_acc,
-                          'Acceleration (mm/s²)', 'Tail')
-    
-    fig.suptitle('Movement Metric Distributions')
-    fig.tight_layout()
-    return fig
-
-def generate_flag_plot(data: pd.DataFrame, flags: dict) -> plt.Figure:
-    """
-    Generate a plot visualizing the flags.
+def generate_distribution_plot(data: Union[pd.DataFrame, np.ndarray], title: str = '', xlabel: str = '', ylabel: str = '', fps: float = 30.0) -> plt.Figure:
+    """Generate a plot of trajectory distributions.
     
     Args:
-        data: DataFrame containing position data
-        flags: Dictionary containing flag data
+        data: DataFrame with trajectory data or numpy array of values
+        title: Plot title
+        xlabel: X-axis label
+        ylabel: Y-axis label
+        fps: Frames per second
         
     Returns:
-        matplotlib Figure object
+        Figure object
     """
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Plot time series of flags
-    for i, (flag_name, flag_data) in enumerate(flags.items()):
-        if flag_data is not None:
-            ax.plot(np.arange(len(flag_data)), flag_data + i, label=flag_name)
+    if isinstance(data, pd.DataFrame):
+        # Calculate speed and acceleration
+        speeds = np.sqrt(
+            np.diff(data['X-Head'])**2 + 
+            np.diff(data['Y-Head'])**2
+        ) * fps
+        
+        accels = np.diff(speeds) * fps
+        
+        # Plot speed distribution
+        ax.hist(speeds, bins='auto', alpha=0.7, label='Speed')
+        ax.set_xlabel('Speed (mm/s)' if not xlabel else xlabel)
+        ax.set_ylabel('Count' if not ylabel else ylabel)
+        ax.set_title('Speed Distribution' if not title else title)
+    else:
+        # Plot distribution of provided data
+        ax.hist(data, bins='auto', alpha=0.7)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
     
-    ax.set_title('Flag Time Series')
+    ax.grid(True)
+    plt.tight_layout()
+    return fig
+
+def generate_flag_plot(data: np.ndarray, flags: Dict[str, np.ndarray], 
+                      title: str = '') -> plt.Figure:
+    """Generate plot showing flags.
+    
+    Args:
+        data: Original data
+        flags: Dictionary of flag arrays
+        title: Plot title
+        
+    Returns:
+        Figure object
+    """
+    fig, ax = plt.subplots()
+    
+    # Plot data
+    x = np.arange(len(data))
+    ax.plot(x, data, 'k-', alpha=0.5, label='Data')
+    
+    # Plot flags
+    colors = ['r', 'g', 'b', 'c', 'm', 'y']
+    for (name, flag_array), color in zip(flags.items(), colors):
+        # Ensure flag array matches data length
+        if len(flag_array) != len(data):
+            flag_array = np.pad(flag_array, (0, len(data) - len(flag_array)), mode='edge')
+        ax.plot(x[flag_array], data[flag_array], color + 'o', label=name)
+    
+    # Add labels
+    ax.set_title(title)
     ax.set_xlabel('Frame')
-    ax.set_ylabel('Flag Type')
+    ax.set_ylabel('Value')
     ax.legend()
     
     return fig
 
-def generate_comparison_plot(raw_data: pd.DataFrame, processed_data: pd.DataFrame,
-                           fps: int) -> plt.Figure:
-    """
-    Generate a plot comparing raw and processed data.
+def generate_comparison_plot(raw_data: pd.DataFrame, processed_data: pd.DataFrame, fps: float = 30.0) -> plt.Figure:
+    """Generate a comparison plot of raw and processed trajectories.
     
     Args:
-        raw_data: DataFrame containing raw position data
-        processed_data: DataFrame containing processed position data
-        fps: Frame rate
+        raw_data: DataFrame with raw trajectory data
+        processed_data: DataFrame with processed trajectory data
+        fps: Frames per second
         
     Returns:
-        matplotlib Figure object
+        Figure object
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(12, 8))
     
-    # Plot raw trajectory
-    plot_trajectory(ax1, raw_data, fps)
-    ax1.set_title('Raw Trajectory')
+    # Plot raw trajectories
+    ax.plot(raw_data['X-Head'], raw_data['Y-Head'], 'b--', label='Raw Head', alpha=0.5)
+    ax.plot(raw_data['X-Head'].iloc[0], raw_data['Y-Head'].iloc[0], 'bo', label='Raw Head Start')
+    ax.plot(raw_data['X-Head'].iloc[-1], raw_data['Y-Head'].iloc[-1], 'b*', label='Raw Head End')
     
-    # Plot processed trajectory
-    plot_trajectory(ax2, processed_data, fps)
-    ax2.set_title('Processed Trajectory')
+    ax.plot(raw_data['X-Tail'], raw_data['Y-Tail'], 'r--', label='Raw Tail', alpha=0.5)
+    ax.plot(raw_data['X-Tail'].iloc[0], raw_data['Y-Tail'].iloc[0], 'ro', label='Raw Tail Start')
+    ax.plot(raw_data['X-Tail'].iloc[-1], raw_data['Y-Tail'].iloc[-1], 'r*', label='Raw Tail End')
+    
+    # Plot processed trajectories
+    ax.plot(processed_data['X-Head'], processed_data['Y-Head'], 'b-', label='Processed Head', alpha=0.7)
+    ax.plot(processed_data['X-Head'].iloc[0], processed_data['Y-Head'].iloc[0], 'bs', label='Processed Head Start')
+    ax.plot(processed_data['X-Head'].iloc[-1], processed_data['Y-Head'].iloc[-1], 'b^', label='Processed Head End')
+    
+    ax.plot(processed_data['X-Tail'], processed_data['Y-Tail'], 'r-', label='Processed Tail', alpha=0.7)
+    ax.plot(processed_data['X-Tail'].iloc[0], processed_data['Y-Tail'].iloc[0], 'rs', label='Processed Tail Start')
+    ax.plot(processed_data['X-Tail'].iloc[-1], processed_data['Y-Tail'].iloc[-1], 'r^', label='Processed Tail End')
+    
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.set_title('Trajectory Comparison')
+    ax.legend()
+    ax.grid(True)
+    
+    return fig
+
+def plot_trajectory(data: np.ndarray, flags: Optional[Dict[str, np.ndarray]] = None,
+                   title: str = '') -> plt.Figure:
+    """Plot trajectory with optional flags.
+    
+    Args:
+        data: Trajectory data
+        flags: Optional dictionary of flag arrays
+        title: Plot title
+        
+    Returns:
+        Figure object
+    """
+    fig, ax = plt.subplots()
+    
+    # Plot trajectory
+    ax.plot(data[:, 0], data[:, 1], 'k-', alpha=0.5, label='Trajectory')
+    
+    # Plot flags if provided
+    if flags is not None:
+        colors = ['r', 'g', 'b', 'c', 'm', 'y']
+        for (name, flag_array), color in zip(flags.items(), colors):
+            # Ensure flag array matches data length
+            if len(flag_array) != len(data):
+                flag_array = np.pad(flag_array, (0, len(data) - len(flag_array)), mode='edge')
+            ax.plot(data[flag_array, 0], data[flag_array, 1], color + 'o', label=name)
+    
+    # Add labels
+    ax.set_title(title)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.legend()
+    
+    return fig
+
+def plot_metrics(metrics: Dict[str, np.ndarray], title: str = '') -> plt.Figure:
+    """Plot metrics over time.
+    
+    Args:
+        metrics: Dictionary of metric arrays
+        title: Plot title
+        
+    Returns:
+        Figure object
+    """
+    fig, axes = plt.subplots(len(metrics), 1, figsize=(10, 2*len(metrics)), sharex=True)
+    if len(metrics) == 1:
+        axes = [axes]
+    
+    # Plot each metric
+    for (name, values), ax in zip(metrics.items(), axes):
+        x = np.arange(len(values))
+        ax.plot(x, values)
+        ax.set_title(name)
+        ax.set_ylabel('Value')
+    
+    # Add labels
+    axes[-1].set_xlabel('Frame')
+    fig.suptitle(title)
+    plt.tight_layout()
     
     return fig

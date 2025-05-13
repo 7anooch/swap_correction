@@ -2,271 +2,259 @@
 
 ## Core Components
 
-### SwapProcessor
+### Tracking Correction
 
-The main class for detecting and correcting head-tail swaps in tracking data.
+The main module for detecting and correcting head-tail swaps in tracking data.
 
 ```python
-from swap_corrector.processor import SwapProcessor
+from swap_corrector import tracking_correction as tc
 
-processor = SwapProcessor(config=None, correction_config=None)
-corrected_data = processor.process(data)
+corrected_data = tc.tracking_correction(
+    data,
+    fps,
+    filterData=False,
+    swapCorrection=True,
+    validate=False,
+    removeErrors=True,
+    interp=True,
+    debug=False
+)
 ```
 
 #### Parameters
-- `config` (SwapConfig, optional): Configuration for swap detection
-- `correction_config` (SwapCorrectionConfig, optional): Configuration for correction pipeline
+- `data` (pd.DataFrame): DataFrame containing tracking data
+- `fps` (float): Frames per second
+- `filterData` (bool): Whether to filter data before correction
+- `swapCorrection` (bool): Whether to correct head-tail swaps
+- `validate` (bool): Whether to validate corrections
+- `removeErrors` (bool): Whether to remove tracking errors
+- `interp` (bool): Whether to interpolate gaps
+- `debug` (bool): Whether to print debug messages
 
-#### Methods
-
-##### process(data: pd.DataFrame) -> pd.DataFrame
-Process tracking data to detect and correct swaps.
-
-**Args:**
-- `data`: DataFrame containing tracking data with columns:
-  - X-Head, Y-Head: Head coordinates
-  - X-Tail, Y-Tail: Tail coordinates
-  - X-Midpoint, Y-Midpoint: Midpoint coordinates
-
-**Returns:**
+#### Returns
 - DataFrame with corrected tracking data
-
-### Detectors
-
-#### Base Detector
-```python
-from swap_corrector.detectors.base import SwapDetector
-
-class CustomDetector(SwapDetector):
-    def detect(self, data: pd.DataFrame) -> np.ndarray:
-        # Implementation
-        pass
-```
-
-#### ProximityDetector
-Detects swaps based on head-tail proximity.
-
-```python
-from swap_corrector.detectors.proximity import ProximityDetector
-
-detector = ProximityDetector(config)
-swaps = detector.detect(data)
-```
-
-#### SpeedDetector
-Detects swaps based on speed anomalies.
-
-```python
-from swap_corrector.detectors.speed import SpeedDetector
-
-detector = SpeedDetector(config)
-swaps = detector.detect(data)
-```
-
-#### TurnDetector
-Detects swaps during turning movements.
-
-```python
-from swap_corrector.detectors.turn import TurnDetector
-
-detector = TurnDetector(config)
-swaps = detector.detect(data)
-```
 
 ### Configuration
 
-#### SwapConfig
-Configuration for swap detection parameters.
+#### SwapCorrectionConfig
+Configuration for the swap correction pipeline.
 
 ```python
-from swap_corrector.config import SwapConfig
+from swap_corrector import config
 
-config = SwapConfig(
-    fps=30,
-    thresholds=SwapThresholds(),
-    window_sizes={'speed': 5, 'acceleration': 7}
+cfg = config.SwapCorrectionConfig(
+    filter_data=False,      # Disable filtering
+    fix_swaps=True,         # Enable swap correction
+    validate=False,         # Disable validation
+    remove_errors=True,     # Remove tracking errors
+    interpolate=True,       # Interpolate gaps
+    debug=False,            # Enable debug output
+    diagnostic_plots=True,  # Generate plots
+    show_plots=False,       # Display plots
+    times=None             # Time range for plots
 )
 ```
 
-#### SwapThresholds
-Thresholds for different types of swap detection.
+### Data Loading
+
+#### PiVR Loader
+Tools for loading and saving PiVR tracking data.
 
 ```python
-from swap_corrector.config import SwapThresholds
+from swap_corrector import pivr_loader as loader
 
-thresholds = SwapThresholds(
-    proximity=2.0,      # pixels
-    speed=10.0,        # pixels/frame
-    angle=np.pi/4,     # radians
-    curvature=0.1      # 1/pixel
-)
-```
+# Load raw data
+data = loader.load_raw_data('path/to/data')
 
-### Filtering
-
-#### TrajectoryFilter
-Filters for smoothing and predicting trajectories.
-
-```python
-from swap_corrector.filtering import TrajectoryFilter
-
-filter = TrajectoryFilter(config)
-filtered_data = filter.preprocess(data)
-smoothed_data = filter.postprocess(data, swap_segments)
+# Save processed data
+loader.save_data(data, 'path/to/output')
 ```
 
 #### Methods
 
-##### preprocess(data: pd.DataFrame) -> pd.DataFrame
-Apply pre-processing filtering to raw data.
+##### load_raw_data(path: str, filename: str = None) -> pd.DataFrame
+Load tracking data from a file.
 
-##### postprocess(data: pd.DataFrame, swap_segments: List[Tuple]) -> pd.DataFrame
-Apply post-processing filtering after swap correction.
+##### save_data(data: pd.DataFrame, path: str, filename: str = None) -> None
+Save tracking data to a file.
 
-##### predict_positions(data: pd.DataFrame, frames_ahead: int = 5) -> Tuple[np.ndarray, np.ndarray]
-Predict future positions for validation.
+##### get_all_settings(path: str) -> dict
+Get all settings for a data file.
+
+### Metrics
+
+#### Metrics Calculation
+Tools for calculating various metrics on tracking data.
+
+```python
+from swap_corrector import metrics
+
+# Calculate orientation
+orientation = metrics.get_orientation(data)
+
+# Calculate head-tail separation
+separation = metrics.get_delta_in_frame(data, 'head', 'tail')
+```
+
+#### Methods
+
+##### get_orientation(data: pd.DataFrame) -> np.ndarray
+Calculate body orientation.
+
+##### get_delta_in_frame(data: pd.DataFrame, point1: str, point2: str) -> np.ndarray
+Calculate separation between two points.
+
+##### get_df_bounds(dataframes: List[pd.DataFrame], columns: List[str]) -> Tuple[float, float]
+Get bounds of data across multiple dataframes.
 
 ### Visualization
 
-#### SwapVisualizer
+#### Plotting
 Tools for visualizing swap detection and correction results.
 
 ```python
-from swap_corrector.visualization import SwapVisualizer
+from swap_corrector import plotting
 
-visualizer = SwapVisualizer(config)
-visualizer.plot_trajectories(raw_data, processed_data, swap_segments)
+# Compare trajectories
+plotting.compare_filtered_trajectories(
+    'path/to/data',
+    output_path='results',
+    file_name='trajectories.png'
+)
+
+# Compare distributions
+plotting.compare_filtered_distributions(
+    'path/to/data',
+    output_path='results',
+    file_name='distributions.png'
+)
+
+# Examine flags
+plotting.examine_flags(
+    'path/to/data',
+    output_path='results',
+    file_name='flags.png'
+)
 ```
 
 #### Methods
 
-##### plot_trajectories(raw_data, processed_data, swap_segments)
-Plot raw and processed trajectories with swap segments highlighted.
+##### compare_filtered_trajectories(main_path: str, output_path: str = None, file_name: str = 'compare_trajectories.png', times: Tuple[float, float] = None, show: bool = True) -> None
+Compare raw and processed trajectories.
 
-##### plot_metrics(data, metrics, swap_segments)
-Plot movement metrics with swap segments highlighted.
+##### compare_filtered_distributions(main_path: str, output_path: str = None, file_name: str = 'compare_distributions.png', show: bool = True) -> None
+Compare distributions of raw and processed data.
 
-##### create_diagnostic_report(raw_data, processed_data, swap_segments, metrics, results, output_dir)
-Create comprehensive diagnostic report with all plots.
+##### examine_flags(main_path: str, output_path: str = None, show: bool = True, file_name: str = 'flags.png', times: Tuple[float, float] = None, label_frames: bool = False) -> None
+Examine flagged frames and verified swap frames.
 
-### Profiling
+### Utilities
 
-#### PerformanceProfiler
-Tools for profiling and optimizing performance.
+#### Utility Functions
+Common utility functions used throughout the package.
 
 ```python
-from swap_corrector.profiling import PerformanceProfiler
+from swap_corrector import utils
 
-profiler = PerformanceProfiler(output_dir)
-processed_data, results = profiler.profile_pipeline(data)
+# Get time axis
+time = utils.get_time_axis(n_frames, fps)
+
+# Get consecutive ranges
+ranges = utils.get_consecutive_ranges(array)
+
+# Filter array
+filtered = utils.filter_array(array, filter)
 ```
 
 #### Methods
 
-##### profile_pipeline(data, config=None, correction_config=None)
-Profile the complete processing pipeline.
+##### get_time_axis(n_frames: int, fps: float) -> np.ndarray
+Create time axis for plotting.
 
-##### profile_component(component_name, func, *args, **kwargs)
-Profile a specific component or function.
+##### get_consecutive_ranges(array: np.ndarray) -> List[Tuple[int, int]]
+Get ranges of consecutive True values.
 
-##### analyze_bottlenecks()
-Analyze profiling results to identify bottlenecks.
+##### filter_array(array: np.ndarray, filter: np.ndarray) -> np.ndarray
+Filter array using boolean mask.
 
 ## Usage Examples
 
 ### Basic Usage
 
 ```python
-from swap_corrector.processor import SwapProcessor
-from swap_corrector.config import SwapConfig
-import pandas as pd
+from swap_corrector import tracking_correction as tc
+from swap_corrector import pivr_loader as loader
 
 # Load data
-data = pd.read_csv('tracking_data.csv')
-
-# Create processor
-processor = SwapProcessor()
+data = loader.load_raw_data('path/to/data')
 
 # Process data
-corrected_data = processor.process(data)
+corrected_data = tc.tracking_correction(
+    data,
+    fps=30,
+    filterData=False,
+    swapCorrection=True,
+    validate=False,
+    removeErrors=True,
+    interp=True
+)
 
 # Save results
-corrected_data.to_csv('corrected_data.csv', index=False)
+loader.save_data(corrected_data, 'path/to/output')
+```
+
+### With Visualization
+
+```python
+from swap_corrector import plotting
+
+# Create diagnostic plots
+plotting.compare_filtered_trajectories(
+    'path/to/data',
+    output_path='results',
+    file_name='trajectories.png'
+)
+
+plotting.compare_filtered_distributions(
+    'path/to/data',
+    output_path='results',
+    file_name='distributions.png'
+)
+
+plotting.examine_flags(
+    'path/to/data',
+    output_path='results',
+    file_name='flags.png'
+)
 ```
 
 ### Custom Configuration
 
 ```python
-from swap_corrector.config import SwapConfig, SwapThresholds
-
-# Create custom thresholds
-thresholds = SwapThresholds(
-    proximity=3.0,
-    speed=15.0,
-    angle=np.pi/3,
-    curvature=0.15
-)
+from swap_corrector import config
+from swap_corrector import tracking_correction as tc
 
 # Create configuration
-config = SwapConfig(
-    fps=30,
-    thresholds=thresholds,
-    window_sizes={
-        'speed': 7,
-        'acceleration': 9,
-        'curvature': 7
-    }
+cfg = config.SwapCorrectionConfig(
+    filter_data=False,
+    fix_swaps=True,
+    validate=False,
+    remove_errors=True,
+    interpolate=True,
+    debug=False,
+    diagnostic_plots=True,
+    show_plots=False
 )
 
-# Create processor with custom config
-processor = SwapProcessor(config=config)
-```
-
-### With Filtering and Visualization
-
-```python
-from swap_corrector.filtering import TrajectoryFilter
-from swap_corrector.visualization import SwapVisualizer
-from pathlib import Path
-
-# Create components
-filter = TrajectoryFilter(config)
-visualizer = SwapVisualizer()
-
-# Pre-process data
-filtered_data = filter.preprocess(data)
-
-# Process data
-processor = SwapProcessor(config)
-corrected_data = processor.process(filtered_data)
-
-# Create visualizations
-output_dir = Path('results')
-visualizer.create_diagnostic_report(
+# Use configuration
+corrected_data = tc.tracking_correction(
     data,
-    corrected_data,
-    processor.swap_segments,
-    processor.metrics,
-    processor.results,
-    output_dir
+    fps=30,
+    filterData=cfg.filter_data,
+    swapCorrection=cfg.fix_swaps,
+    validate=cfg.validate,
+    removeErrors=cfg.remove_errors,
+    interp=cfg.interpolate,
+    debug=cfg.debug
 )
-```
-
-### Performance Profiling
-
-```python
-from swap_corrector.profiling import PerformanceProfiler
-from pathlib import Path
-
-# Create profiler
-profiler = PerformanceProfiler(output_dir=Path('profiling_results'))
-
-# Profile pipeline
-processed_data, results = profiler.profile_pipeline(data)
-
-# Analyze bottlenecks
-bottlenecks = profiler.analyze_bottlenecks()
-
-# Generate optimization report
-profiler.generate_optimization_report(bottlenecks)
 ``` 

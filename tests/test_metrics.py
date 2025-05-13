@@ -59,8 +59,14 @@ def test_get_position(sample_data):
 
 def test_get_speed(sample_data):
     """Test speed calculation."""
+    # Create sample data with lowercase column names
+    sample_data = sample_data.rename(columns={
+        'X-Head': 'xhead', 'Y-Head': 'yhead',
+        'X-Tail': 'xtail', 'Y-Tail': 'ytail'
+    })
+    
     metrics = MovementMetrics(sample_data, fps=30)
-    speed = metrics.get_speed('Head')
+    speed = metrics.get_speed('head')
     
     # Speed should be positive
     assert np.all(speed >= 0)

@@ -178,11 +178,18 @@ def get_bearing(data : pd.DataFrame, source : list[float] = [0,0],
 
 def get_ht_cross_sign(data : pd.DataFrame) -> np.ndarray:
     """
-    Returns the signs of the z-components of the cross-products between tail-midpt and midpt-head vectors
+    Returns the signs of the z-components of the cross-products between tail-midpt and midpt-head vectors.
+    This is used to detect head-tail swaps.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing tracking data with head and tail positions
+
+    Returns:
+        np.ndarray: Array of signs (-1, 0, or 1) indicating the direction of the cross product
     """
-    u = get_orientation_vectors(data,True) # midpt-head
-    v = get_orientation_vectors(data,False) # tail-midpt
-    return utils.get_cross_sign(v,u)
+    u = get_orientation_vectors(data, True)  # midpt-head
+    v = get_orientation_vectors(data, False)  # tail-midpt
+    return utils.get_cross_sign(v, u)
 
 
 def get_orientation_vectors(data : pd.DataFrame, head : bool = False, fromMotion : bool = False) -> np.ndarray:

@@ -13,12 +13,10 @@ The Swap Correction system is a comprehensive solution for detecting and correct
   - [Basic Usage](user/tutorials/basic_usage.md)
   - [Advanced Usage](user/tutorials/advanced_usage.md)
   - [Visualization](user/tutorials/visualization.md)
-  - [Performance Optimization](user/tutorials/performance.md)
 - [Examples](user/examples/) - Practical examples
   - [Basic Correction](user/examples/basic_correction.md)
   - [Custom Configuration](user/examples/custom_config.md)
   - [Batch Processing](user/examples/batch_processing.md)
-  - [Visualization](user/examples/visualization.md)
 - [FAQ](user/faq.md) - Frequently asked questions
 - [Troubleshooting](user/troubleshooting.md) - Common issues and solutions
 
@@ -26,14 +24,11 @@ The Swap Correction system is a comprehensive solution for detecting and correct
 - [Developer Guide](developer/developer_guide.md) - Development guidelines
 - [Architecture](developer/architecture.md) - System architecture
 - [Testing](developer/testing.md) - Testing guidelines
-- [Performance](developer/performance.md) - Performance optimization
 - [Style Guide](developer/style_guide.md) - Code style and conventions
-- [Release Process](developer/release_process.md) - Release guidelines
 
 ### API Documentation
-- [API Reference](api/api.md) - Complete API documentation
+- [API Reference](api.md) - Complete API documentation
 - [Configuration](api/configuration.md) - Configuration options
-- [Detectors](api/detectors.md) - Detector implementations
 - [Metrics](api/metrics.md) - Metrics calculation
 - [Filtering](api/filtering.md) - Filtering methods
 - [Visualization](api/visualization.md) - Visualization tools
@@ -41,15 +36,13 @@ The Swap Correction system is a comprehensive solution for detecting and correct
 ### Research Documentation
 - [Methodology](research/methodology.md) - Research methodology
 - [Results](research/results.md) - Research results
-- [Analysis](research/analysis.md) - Analysis methods
 - [Validation](research/validation.md) - Validation procedures
-- [Benchmarks](research/benchmarks.md) - Performance benchmarks
 
 ## Quick Links
 
 - [Installation Guide](user/installation.md)
 - [Quick Start Guide](quickstart.md)
-- [API Reference](api/api.md)
+- [API Reference](api.md)
 - [Developer Guide](developer/developer_guide.md)
 - [FAQ](user/faq.md)
 

@@ -1,0 +1,44 @@
+Swap Correction Analysis Summary
+==============================
+
+Total datasets analyzed: 6
+Total frames analyzed: 54000
+Total swaps in raw data: 25121 (46.52%)
+Total swaps in level1 data: 10598 (19.63%)
+Total swaps in current version: 15615 (28.92%)
+
+Average Metrics:
+---------------
+Current Version:
+  mean_head_position_error: 4.6133
+  mean_tail_position_error: 4.6133
+  mean_head_speed_error: 3.1079
+  mean_tail_speed_error: 3.1137
+  mean_angle_error: 0.0000
+  max_head_position_error: 29.9991
+  max_tail_position_error: 29.9991
+  max_head_speed_error: 172.5129
+  max_tail_speed_error: 171.0253
+  max_angle_error: 0.0000
+  std_head_position_error: 6.6053
+  std_tail_position_error: 6.6053
+  std_head_speed_error: 8.9132
+  std_tail_speed_error: 8.9446
+  std_angle_error: 0.0000
+
+Level1 Version:
+  mean_head_position_error: 3.2797
+  mean_tail_position_error: 3.2798
+  mean_head_speed_error: 1.8781
+  mean_tail_speed_error: 1.8825
+  mean_angle_error: 0.0000
+  max_head_position_error: 27.5046
+  max_tail_position_error: 27.5046
+  max_head_speed_error: 158.3963
+  max_tail_speed_error: 154.6490
+  max_angle_error: 0.0000
+  std_head_position_error: 6.2296
+  std_tail_position_error: 6.2296
+  std_head_speed_error: 5.9734
+  std_tail_speed_error: 6.0112
+  std_angle_error: 0.0000

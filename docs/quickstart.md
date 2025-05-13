@@ -16,95 +16,95 @@ pip install -e .
 ### 1. Simple Correction
 
 ```python
-from swap_corrector.processor import SwapProcessor
+from swap_corrector import tracking_correction as tc
+from swap_corrector import pivr_loader as loader
 import pandas as pd
 
 # Load your tracking data
-data = pd.read_csv('tracking_data.csv')
+data = loader.load_raw_data('path/to/data')
 
-# Create processor with default settings
-processor = SwapProcessor()
-
-# Process data
-corrected_data = processor.process(data)
+# Process data with default settings
+corrected_data = tc.tracking_correction(
+    data,
+    fps=30,  # Your frame rate
+    filterData=False,
+    swapCorrection=True,
+    validate=False,
+    removeErrors=True,
+    interp=True
+)
 
 # Save results
-corrected_data.to_csv('corrected_data.csv', index=False)
+loader.save_data(corrected_data, 'path/to/output')
 ```
 
 ### 2. With Visualization
 
 ```python
-from swap_corrector.processor import SwapProcessor
-from swap_corrector.visualization import SwapVisualizer
+from swap_corrector import tracking_correction as tc
+from swap_corrector import plotting, utils, metrics
 from pathlib import Path
 
 # Load data
-data = pd.read_csv('tracking_data.csv')
-
-# Create processor and visualizer
-processor = SwapProcessor()
-visualizer = SwapVisualizer()
+data = loader.load_raw_data('path/to/data')
 
 # Process data
-corrected_data = processor.process(data)
+corrected_data = tc.tracking_correction(data, fps=30)
 
 # Create diagnostic plots
 output_dir = Path('results')
 output_dir.mkdir(exist_ok=True)
 
-visualizer.plot_trajectories(
-    data,
-    corrected_data,
-    processor.swap_segments,
-    save_path=output_dir / 'trajectories.png'
+# Compare trajectories
+plotting.compare_filtered_trajectories(
+    'path/to/data',
+    output_path=output_dir,
+    file_name='trajectories.png'
+)
+
+# Compare distributions
+plotting.compare_filtered_distributions(
+    'path/to/data',
+    output_path=output_dir,
+    file_name='distributions.png'
+)
+
+# Examine flags
+plotting.examine_flags(
+    'path/to/data',
+    output_path=output_dir,
+    file_name='flags.png'
 )
 ```
 
 ### 3. Custom Configuration
 
 ```python
-from swap_corrector.config import SwapConfig, SwapThresholds
-
-# Create custom thresholds
-thresholds = SwapThresholds(
-    proximity=3.0,      # More lenient proximity threshold
-    speed=15.0,        # Higher speed threshold
-    angle=np.pi/3,     # Different angle threshold
-    curvature=0.15     # Different curvature threshold
-)
+from swap_corrector import config
 
 # Create configuration
-config = SwapConfig(
-    fps=30,            # Your frame rate
-    thresholds=thresholds
+cfg = config.SwapCorrectionConfig(
+    filter_data=False,      # Disable filtering
+    fix_swaps=True,         # Enable swap correction
+    validate=False,         # Disable validation
+    remove_errors=True,     # Remove tracking errors
+    interpolate=True,       # Interpolate gaps
+    debug=False,            # Disable debug output
+    diagnostic_plots=True,  # Generate plots
+    show_plots=False        # Don't display plots
 )
 
-# Create processor with custom config
-processor = SwapProcessor(config=config)
-```
-
-### 4. With Filtering
-
-```python
-from swap_corrector.processor import SwapProcessor
-from swap_corrector.filtering import TrajectoryFilter
-
-# Load data
-data = pd.read_csv('tracking_data.csv')
-
-# Create components
-filter = TrajectoryFilter()
-processor = SwapProcessor()
-
-# Pre-process data
-filtered_data = filter.preprocess(data)
-
-# Process data
-corrected_data = processor.process(filtered_data)
-
-# Post-process data
-final_data = filter.postprocess(corrected_data, processor.swap_segments)
+# Use configuration in tracking correction
+corrected_data = tc.tracking_correction(
+    data,
+    fps=30,
+    filterData=cfg.filter_data,
+    swapCorrection=cfg.fix_swaps,
+    validate=cfg.validate,
+    removeErrors=cfg.remove_errors,
+    interp=cfg.interpolate,
+    debug=cfg.debug
+)
 ```
 
 ## Data Format
@@ -138,89 +138,62 @@ data_dir = Path('data')
 output_dir = Path('results')
 output_dir.mkdir(exist_ok=True)
 
-processor = SwapProcessor()
-
 for data_file in data_dir.glob('*.csv'):
     # Load data
-    data = pd.read_csv(data_file)
+    data = loader.load_raw_data(data_file)
     
     # Process
-    corrected_data = processor.process(data)
+    corrected_data = tc.tracking_correction(data, fps=30)
     
     # Save results
-    output_path = output_dir / f"corrected_{data_file.name}"
-    corrected_data.to_csv(output_path, index=False)
+    loader.save_data(corrected_data, output_dir / f"corrected_{data_file.name}")
 ```
 
-### 2. Performance Analysis
+### 2. Diagnostic Visualization
 
 ```python
-from swap_corrector.profiling import PerformanceProfiler
-
-# Create profiler
-profiler = PerformanceProfiler()
-
-# Profile processing
-processed_data, results = profiler.profile_pipeline(data)
-
-# Analyze results
-print(f"Processing time: {results['timing']['total_time']:.2f}s")
-print(f"Memory usage: {results['memory']['peak_usage']:.1f}MB")
-```
-
-### 3. Diagnostic Visualization
-
-```python
-from swap_corrector.visualization import SwapVisualizer
-
-visualizer = SwapVisualizer()
+from swap_corrector import plotting
 
 # Create comprehensive report
-visualizer.create_diagnostic_report(
-    raw_data=data,
-    processed_data=corrected_data,
-    swap_segments=processor.swap_segments,
-    metrics=processor.metrics,
-    results=processor.results,
-    output_dir=Path('diagnostics')
+plotting.compare_filtered_trajectories(
+    'path/to/data',
+    output_path='diagnostics',
+    file_name='trajectories.png'
+)
+
+plotting.compare_filtered_distributions(
+    'path/to/data',
+    output_path='diagnostics',
+    file_name='distributions.png'
+)
+
+plotting.examine_flags(
+    'path/to/data',
+    output_path='diagnostics',
+    file_name='flags.png'
 )
 ```
 
 ## Configuration Options
 
-### 1. Detection Thresholds
+### Processing Options
 
 ```python
-thresholds = SwapThresholds(
-    # Base thresholds
-    proximity=2.0,      # Minimum distance between head and tail
-    speed=10.0,        # Maximum expected speed
-    angle=np.pi/4,     # Maximum angle change
-    curvature=0.1,     # Maximum path curvature
-    
-    # High-speed thresholds
-    acceleration_threshold=5.0,
-    jerk_threshold=10.0,
-    
-    # Turn detection
-    turn_radius_threshold=5.0,
-    path_tortuosity_threshold=1.5
-)
-```
+from swap_corrector import config
 
-### 2. Processing Options
-
-```python
-correction_config = SwapCorrectionConfig(
+cfg = config.SwapCorrectionConfig(
     # Processing settings
-    fix_swaps=True,          # Enable swap correction
-    validate=True,           # Validate corrections
-    remove_errors=True,      # Remove tracking errors
-    interpolate=True,        # Interpolate gaps
+    filter_data=False,      # Disable filtering
+    fix_swaps=True,         # Enable swap correction
+    validate=False,         # Disable validation
+    remove_errors=True,     # Remove tracking errors
+    interpolate=True,       # Interpolate gaps
     
     # Debug settings
-    debug=False,             # Enable debug output
-    diagnostic_plots=True    # Generate plots
+    debug=False,            # Enable debug output
+    diagnostic_plots=True,  # Generate plots
+    show_plots=False,       # Display plots
+    times=None             # Time range for plots (None -> show all)
 )
 ```
 
@@ -238,13 +211,8 @@ correction_config = SwapCorrectionConfig(
    - Enable validation
    - Check data quality
 
-3. **Performance Issues**
-   - Use filtering
-   - Process in batches
-   - Profile bottlenecks
-
 ### Getting Help
 
 1. Check the [API Documentation](api.md)
-2. Review the [Developer Guide](developer_guide.md)
+2. Review the [Developer Guide](developer/developer_guide.md)
 3. File an issue on GitHub 
