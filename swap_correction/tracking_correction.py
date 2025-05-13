@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 from swap_correction import utils, metrics
-from kalman_filter import KalmanFilter
+from swap_correction.kalman_filter import KalmanFilter
 
 # Parameters
 OVERLAP_THRESH = 0 # maximum distance between overlapping points
@@ -43,6 +43,9 @@ def remove_edge_frames(rawData : pd.DataFrame, debug : bool = False) -> pd.DataF
     cols = utils.flatten(metrics.POSDICT.values())
     xcols = [col for col in cols if 'x' in col] # sloppy, but functional
     ycols = [col for col in cols if 'y' in col]
+
+    # Ensure columns are float for NaN assignment
+    data[cols] = data[cols].astype(float)
 
     # find overlap frames at edges where raw position data set to zero
     # NOTE: data has been translated, so positions will not be zero; need to look see where all values identical

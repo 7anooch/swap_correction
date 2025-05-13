@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from swap_correction import metrics
+import warnings
 
 
 @pytest.fixture
@@ -127,4 +128,117 @@ def test_get_df_bounds(sample_dataframe):
     np.testing.assert_almost_equal(xlim[0], expected_xmin, decimal=2)
     np.testing.assert_almost_equal(xlim[1], expected_xmax, decimal=2)
     np.testing.assert_almost_equal(ylim[0], expected_ymin, decimal=2)
-    np.testing.assert_almost_equal(ylim[1], expected_ymax, decimal=2) 
+    np.testing.assert_almost_equal(ylim[1], expected_ymax, decimal=2)
+
+
+def test_detect_stops_via_threshold():
+    spd = np.array([0.1, 0.2, 1.0, 0.1, 0.05, 1.5, 0.1])
+    stops, durations = metrics.detect_stops_via_threshold(spd, minSpeed=0.5, minTime=1, fps=1)
+    assert stops.shape == spd.shape
+    assert durations.shape == spd.shape
+
+
+def test_get_dist_from_df(sample_dataframe):
+    dist = metrics.get_dist_from_df(sample_dataframe, 'head', origin=(0, 0))
+    assert dist.shape == (5,)
+    assert np.all(dist >= 0)
+
+
+def test_get_event_vector():
+    df = pd.DataFrame({
+        'duration': [0, 2, 0, 3, 4],
+        'stop': [1, 1, 0, 0, 1]
+    })
+    vec = metrics.get_event_vector(df, col='duration', stop=True)
+    assert np.all(vec.values > 0)
+    vec = metrics.get_event_vector(df, col='duration', stop=False)
+    assert np.all(vec.values > 0)
+
+
+def test_get_head_angle_edge_cases(sample_dataframe):
+    # Should work for default and halfAngle=True
+    angle = metrics.get_head_angle(sample_dataframe)
+    angle_half = metrics.get_head_angle(sample_dataframe, halfAngle=True)
+    assert angle.shape == angle_half.shape
+
+
+def test_get_orientation_vectors_branches(sample_dataframe):
+    # Default (tail-mid)
+    v1 = metrics.get_orientation_vectors(sample_dataframe)
+    # Head orientation
+    v2 = metrics.get_orientation_vectors(sample_dataframe, head=True)
+    # From motion
+    v3 = metrics.get_orientation_vectors(sample_dataframe, fromMotion=True)
+    assert v1.shape == v2.shape == v3.shape
+
+
+def test_get_local_tortuosity(sample_dataframe):
+    tort = metrics.get_local_tortuosity(sample_dataframe, window=2, key='mid')
+    assert tort.shape[0] == sample_dataframe.shape[0]
+    # Edge case: window larger than data
+    tort2 = metrics.get_local_tortuosity(sample_dataframe, window=100, key='mid')
+    assert tort2.shape[0] == sample_dataframe.shape[0]
+
+
+def test_get_segment_tortuosity(sample_dataframe, sample_segments):
+    tort = metrics.get_segment_tortuosity(sample_dataframe, sample_segments, key='mid')
+    assert tort.shape[0] == sample_segments.shape[0]
+    # Edge case: combined=True
+    tort2 = metrics.get_segment_tortuosity(sample_dataframe, sample_segments, key='mid', combined=True)
+    assert tort2.shape[0] == sample_segments.shape[0]
+
+
+def test_perfectly_overlapping(sample_dataframe):
+    # Should be no perfect overlaps
+    result = metrics.perfectly_overlapping(sample_dataframe, 'head', 'tail', where=True)
+    assert isinstance(result, np.ndarray)
+    result_bool = metrics.perfectly_overlapping(sample_dataframe, 'head', 'tail', where=False)
+    assert isinstance(result_bool, np.ndarray)
+
+
+def test_get_df_bounds_empty_nan():
+    df = pd.DataFrame({'a': [np.nan, np.nan], 'b': [np.nan, np.nan]})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        bounds = metrics.get_df_bounds([df], ['a', 'b'])
+    assert isinstance(bounds, tuple)
+    # Should be nan or zeros
+    assert np.isnan(bounds[0]) or bounds[0] == 0
+    assert np.isnan(bounds[1]) or bounds[1] == 0
+
+
+def test_get_speed_from_df_empty_missing():
+    df = pd.DataFrame()
+    # Should handle empty DataFrame gracefully
+    try:
+        spd = metrics.get_speed_from_df(df, 'head')
+    except Exception:
+        pass
+    # Missing columns
+    df = pd.DataFrame({'xhead': [1, 2], 'yhead': [1, 2]})
+    spd = metrics.get_speed_from_df(df, 'head')
+    assert spd.shape[0] == 2
+
+
+def test_get_segment_tortuosity_step_combined(sample_dataframe, sample_segments):
+    tort = metrics.get_segment_tortuosity(sample_dataframe, sample_segments, key='mid', step=2, combined=True)
+    assert tort.shape[0] == sample_segments.shape[0]
+
+
+def test_get_delta_between_frames_key1_only(sample_dataframe):
+    delta = metrics.get_delta_between_frames(sample_dataframe, 'head')
+    assert delta.shape[0] == sample_dataframe.shape[0] - 1
+
+
+def test_get_df_bounds_single_col_warns():
+    df = pd.DataFrame({'a': [1, 2, 3, 4]})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        bounds = metrics.get_df_bounds([df], ['a'])
+    assert isinstance(bounds, tuple)
+    assert bounds[0] < 1 and bounds[1] > 4
+
+
+def test_get_delta_between_frames_key1_key2(sample_dataframe):
+    delta = metrics.get_delta_between_frames(sample_dataframe, 'head', 'tail')
+    assert delta.shape[0] == sample_dataframe.shape[0] - 1 

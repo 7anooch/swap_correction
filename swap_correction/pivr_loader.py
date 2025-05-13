@@ -155,7 +155,7 @@ def get_settings(mainPath : str, mmSource : bool = False) -> tuple:
     # if no source entry (odor-less assay), set source to (0,0)
     if 'Source x' in settings.keys():
         source = np.array([settings['Source x'],settings['Source y']])
-        if mmSource : source /= ppmm
+        if mmSource : source = source / ppmm
     else:
         source = np.zeros(2)
 

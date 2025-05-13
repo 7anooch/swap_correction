@@ -49,6 +49,14 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
     ccol = 'grey' # centroid
     anncol = 'g' # annotation color (odor, start)
 
+    if data.empty:
+        return
+
+    # Set axis limits first
+    if limits is not None:
+        ax.set_xlim(limits[0], limits[1])
+        ax.set_ylim(limits[0], limits[1])
+
     if times is not None:
         # get start, end indices
         a, b = times
@@ -64,8 +72,11 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
         yctr = data.loc[a:b-1,'yctr'].values
 
         # get first non-NaN position to indicate start
-        xo = xctr[~np.isnan(xctr)][0]
-        yo = yctr[~np.isnan(yctr)][0]
+        valid_mask = ~np.isnan(xctr)
+        if not np.any(valid_mask):
+            return
+        xo = xctr[valid_mask][0]
+        yo = yctr[valid_mask][0]
 
         # assign centroid color using LED data
         if ledData is not None : ccol = _get_colors_from_LED(ledData[a:b])
@@ -75,9 +86,11 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
             ax.plot(xtail,ytail,c=tcol,alpha=0.5,label='tail')
         ax.scatter(xctr,yctr,c=ccol,s=0.1,label='ctrd')
         ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
-
     else:
         # get first non-NaN position to indicate start
+        valid_mask = ~np.isnan(data['xctr'])
+        if not np.any(valid_mask):
+            return
         xo = data['xctr'].loc[data['xctr'].first_valid_index()]
         yo = data['yctr'].loc[data['yctr'].first_valid_index()]
 
@@ -90,13 +103,12 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
             ccol = _get_colors_from_LED(ledData)
             ax.scatter(data['xctr'],data['yctr'],c=ccol,s=0.1,label='ctrd')
         ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
-        
     ax.scatter(*source,c=anncol,marker='o',s=10,label='odor')
     ax.set_title('Trajectory (mm)')
-    if limits is not None:
-        ax.set_xlim(*limits)
-        ax.set_ylim(*limits)
     ax.axis('square')
+    if limits is not None:
+        ax.set_xlim(limits[0], limits[1])
+        ax.set_ylim(limits[0], limits[1])
     if legend : ax.legend(loc="upper right")
 
 
@@ -112,15 +124,16 @@ def plot_stacked_trajectories(ax : plt.Axes, dfs : list[pd.DataFrame],
     source (list): the coordinates [x,y] of the odor source
     ledData (np.ndarray): array indicating LED activity
     """
+    cmap = plt.get_cmap('viridis')
+    
     # indicate led activity
     if ledData is not None:
         for i, data in enumerate(dfs):
-            cols = _get_colors_from_LED(data['stimulus']) # in case data different lengths ...
+            cols = _get_colors_from_LED(ledData)  # Use the provided LED data directly
             ax.scatter(data['xctr'],data['yctr'],c=cols,s=0.1)
     # indicate time with color gradient
     elif timeSpectrum:
         nframes = dfs[0].shape[0]
-        cmap = plt.get_cmap('viridis')
         cols = cmap(np.linspace(0,1,nframes)) # create a spectrum of colors across timepoints
         cols = np.flip(cols,0) # make color-coding more intuitive
         for i, data in enumerate(dfs):
@@ -140,11 +153,10 @@ def _get_colors_from_LED(ledData : np.ndarray) -> list:
     '''Convert LED data to color array on black -> red'''
     colors = [(0, 0, 0), (1, 0, 0)] # first color is black, last is red
     cmap = LinearSegmentedColormap.from_list("Custom",colors,N=10)
-    
     ledmax = np.max(ledData)
     if ledmax == 0 : ledmax = 1
-
-    return cmap(ledData / ledmax)
+    # Return only RGB (first 3) from colormap
+    return [tuple(float(x) for x in cmap(v / ledmax)[:3]) for v in ledData]
 
 
 def single_timeseries(ax : plt.Axes, time : np.ndarray, var : np.ndarray, ledData : np.ndarray,
@@ -423,19 +435,20 @@ def fft(ax : plt.Axes, data : np.ndarray, fps : int = 30,
 
 
 def get_power_spectrum(data : np.ndarray, fps : int = 30) -> tuple[np.ndarray,np.ndarray,np.ndarray]:
-    '''
-    Extract the mean and std dev of the power spectrum of the input vectors
-    returns: frequency, average spectrum, std dv spectrum
-    TODO: add Welch vs default option
-
-    data: 1D or 2D (nsamples,nframes) vector to analyse
-    fps: sample rate (frame rate)
-    '''
-    filtData = np.nan_to_num(data,True,0,0,0)
-    f, pwelch = signal.welch(filtData, fps)
-    avg = np.mean(pwelch,axis=0)
-    err = np.std(pwelch,axis=0)
-    return f, avg, err
+    """
+    Calculate power spectrum of a signal
+    
+    data: input signal
+    fps: sampling rate in Hz
+    
+    Returns:
+    freqs: frequency array
+    power: power spectrum
+    amp: amplitude spectrum
+    """
+    freqs, power = signal.welch(data, fps, nperseg=min(256, len(data)))
+    amp = np.sqrt(power)
+    return freqs, power, amp
 
 
 def power_spectrum(ax : plt.Axes, data : np.ndarray, fps : int = 30,
