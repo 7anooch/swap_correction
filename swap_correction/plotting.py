@@ -7,7 +7,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import KernelDensity
 from scipy import stats, signal
-import utils
+from swap_correction import utils
 import warnings
 
 
@@ -324,40 +324,49 @@ def _mix_pdf(x, loc, scale, weights):
         d += pi * stats.norm.pdf(x, loc=mu, scale=sigma)
     return d
 
-def gmm(ax : plt.Axes, data : np.ndarray, npeaks : int, nbins : int, xlim : tuple) -> None:
-    '''
-    Fit a GMM against the distribution of values in the input array and plot the result
 
-    a: axes to plot on
-    data: input vector
-    npeaks: number of peaks to fit to
-    nbins: number of bins to use in histogram
-    xlim: range of values to consider
-    '''
-    vals = data[data <= xlim[1]]
-    vals = vals[vals >= xlim[0]]
-    vals = vals[vals != np.NaN]
-    vals = vals.reshape((vals.size,1))
-
-    # fit GMM
-    mix = GaussianMixture(n_components=npeaks, random_state=1, max_iter=100).fit(vals)
-    pi = mix.weights_.flatten()
-    mu = mix.means_.flatten()
-    sigma = np.sqrt(mix.covariances_.flatten())
-
-    # get pdf
-    xpdf = np.linspace(xlim[0], xlim[1], 1000)
-    pdf = _mix_pdf(xpdf, mu, sigma, pi)
-
-    # get minima
-    pdfmin = signal.argrelextrema(pdf, np.less)
-    print('GMM local minima:',pdfmin[0])
-
-    # plot
-    ax.hist(vals, bins=nbins, density=True, alpha=0.2)
-    ax.plot(xpdf, pdf)
-    #ax.axvline(pdfmin,c='grey')
+def gmm(ax, data, n_components, n_bins, xlim):
+    """
+    Plot a Gaussian Mixture Model fit to the data.
+    
+    Parameters:
+    -----------
+    ax : matplotlib.axes.Axes
+        The axes to plot on
+    data : array-like
+        The data to fit the GMM to
+    n_components : int
+        Number of Gaussian components
+    n_bins : int
+        Number of histogram bins
+    xlim : tuple
+        x-axis limits
+    """
+    from sklearn.mixture import GaussianMixture
+    
+    # Fit GMM
+    gmm = GaussianMixture(n_components=n_components)
+    gmm.fit(data.reshape(-1, 1))
+    
+    # Plot histogram
+    ax.hist(data, bins=n_bins, density=True, alpha=0.5)
+    
+    # Plot GMM
+    x = np.linspace(xlim[0], xlim[1], 1000)
+    logprob = gmm.score_samples(x.reshape(-1, 1))
+    pdf = np.exp(logprob)
+    ax.plot(x, pdf, '-k', label='GMM')
+    
+    # Plot individual components
+    for i in range(n_components):
+        mean = gmm.means_[i][0]
+        std = np.sqrt(gmm.covariances_[i][0, 0])
+        weight = gmm.weights_[i]
+        ax.plot(x, weight * stats.norm.pdf(x, mean, std), '--', 
+                label=f'Component {i+1}')
+    
     ax.set_xlim(xlim)
+    ax.legend()
 
 
 def get_fft(data : np.ndarray, fps : int = 30) -> tuple[np.ndarray,np.ndarray]:

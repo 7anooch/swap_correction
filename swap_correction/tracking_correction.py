@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy as sp
-import utils, metrics
+from swap_correction import utils, metrics
 from kalman_filter import KalmanFilter
 
 # Parameters
@@ -823,17 +823,6 @@ def filter_gaussian(rawData : pd.DataFrame, sigma : float = 3) -> pd.DataFrame:
     return data
 
 
-def filter_butter(rawData : pd.DataFrame, fps : int, cutoff : float = 0, order : int = 5) -> pd.DataFrame:
-    '''Apply a Butterworth low-pass filter to the position data'''
-    data = rawData.copy()
-
-    b, a = sp.signal.butter(order,cutoff,fs=fps,btype='low',analog=False)
-    for col in utils.flatten(metrics.POSDICT.values()):
-        data[col] = sp.signal.lfilter(b, a, data[col].to_numpy())
-    
-    return data
-
-
 def filter_meanmed(rawData : pd.DataFrame, medWin : int = 15, meanWin : int | None = None) -> pd.DataFrame:
     '''Filter the position data by taking a rolling median followed by a rolling mean'''
     data = rawData.copy()
@@ -843,18 +832,6 @@ def filter_meanmed(rawData : pd.DataFrame, medWin : int = 15, meanWin : int | No
         med = sp.ndimage.median_filter(data[col].to_numpy(),medWin)
         avg = sp.ndimage.uniform_filter(med,meanWin)
         data[col] = avg
-    
-    return data
-
-
-def filter_med_gaussian(rawData : pd.DataFrame, sigma : float = 3, win : int = 5) -> pd.DataFrame:
-    '''Apply Median and Gaussian filter to the position data'''
-    data = rawData.copy()
-
-    for col in utils.flatten(metrics.POSDICT.values()):
-        med = sp.ndimage.median_filter(data[col].to_numpy(),win)
-        gauss = sp.ndimage.gaussian_filter1d(med,sigma)
-        data[col] = gauss
     
     return data
 
@@ -869,42 +846,59 @@ def filter_median(rawData : pd.DataFrame, win : int = 5) -> pd.DataFrame:
     return data
 
 
-def filter_mean(rawData : pd.DataFrame, win : int = 5) -> pd.DataFrame:
-    '''Filter the position data using a rolling mean'''
-    data = rawData.copy()
+# def filter_med_gaussian(rawData : pd.DataFrame, fps : int, window : int = 5, sigma : float = 1.0) -> pd.DataFrame:
+#     '''
+#     Apply a median filter followed by a Gaussian filter to the position data
 
-    for col in utils.flatten(metrics.POSDICT.values()):
-        data[col] = sp.ndimage.uniform_filter(data[col].to_numpy(),win)
-    
-    return data
+#     rawData: unfiltered position data
+#     fps: frame rate
+#     window: window size for median filter
+#     sigma: standard deviation for Gaussian filter
+#     '''
+#     data = rawData.copy()
+#     cols = ['head','tail','mid','ctr'] # partial keys of columns of interest
+#     for col in cols:
+#         # extract data
+#         xcol = 'x'+col
+#         ycol = 'y'+col
+
+#         start = max(data[xcol].first_valid_index(),data[ycol].first_valid_index())
+#         end = min(data[xcol].last_valid_index(),data[ycol].last_valid_index()) + 1
+
+#         vec = data.loc[start:end,[xcol,ycol]].to_numpy() # extract data, omitting NaNs at edges
+
+#         # create and run filter
+#         # TODO: ensure NaNs mtch between x, y vectors
+#         data.loc[start:end,[xcol,ycol]] = filter_med_gaussian_vec(vec,window,sigma)
+#     return data
 
 
-def filter_kalman(rawData : pd.DataFrame, fps : int, derivatives : int = 2, **kwargs) -> pd.DataFrame:
-    '''
-    Apply a Kalman filter to the position data
+# def filter_kalman(rawData : pd.DataFrame, fps : int, derivatives : int = 2, **kwargs) -> pd.DataFrame:
+#     '''
+#     Apply a Kalman filter to the position data
 
-    rawData: unfiltered position data
-    derivatives: number of derivativesto use in estimations
-    dt: time step
-    '''
-    data = rawData.copy()
-    dt = 1/fps # time step
-    ndim = 2 # number of dimensions; TODO: fully generalize?
+#     rawData: unfiltered position data
+#     derivatives: number of derivativesto use in estimations
+#     dt: time step
+#     '''
+#     data = rawData.copy()
+#     dt = 1/fps # time step
+#     ndim = 2 # number of dimensions; TODO: fully generalize?
 
-    kfilter = KalmanFilter(dt,ndim,derivatives,**kwargs) # set up Kalman filter
-    cols = ['head','tail','mid','ctr'] # partial keys of columns of interest
-    for col in cols:
-        # extract data
-        xcol = 'x'+col
-        ycol = 'y'+col
+#     kfilter = KalmanFilter(dt,ndim,derivatives,**kwargs) # set up Kalman filter
+#     cols = ['head','tail','mid','ctr'] # partial keys of columns of interest
+#     for col in cols:
+#         # extract data
+#         xcol = 'x'+col
+#         ycol = 'y'+col
 
-        start = max(data[xcol].first_valid_index(),data[ycol].first_valid_index())
-        end = min(data[xcol].last_valid_index(),data[ycol].last_valid_index()) + 1
+#         start = max(data[xcol].first_valid_index(),data[ycol].first_valid_index())
+#         end = min(data[xcol].last_valid_index(),data[ycol].last_valid_index()) + 1
 
-        vec = data.loc[start:end,[xcol,ycol]].to_numpy() # extract data, omitting NaNs at edges
+#         vec = data.loc[start:end,[xcol,ycol]].to_numpy() # extract data, omitting NaNs at edges
 
-        # create and run filter
-        # TODO: ensure NaNs mtch between x, y vectors
-        data.loc[start:end,[xcol,ycol]] = kfilter.filter(vec)
-    return data
+#         # create and run filter
+#         # TODO: ensure NaNs mtch between x, y vectors
+#         data.loc[start:end,[xcol,ycol]] = kfilter.filter(vec)
+#     return data
             

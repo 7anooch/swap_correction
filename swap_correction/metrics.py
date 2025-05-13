@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import utils
+from swap_correction import utils
 
 
 POSDICT = {
@@ -163,7 +163,7 @@ def get_custom_orientation(data : pd.DataFrame, p1 : str = 'mid', p2 : str = 'he
     v = get_vectors_between(data,p1,p2)
     ba = [utils.get_angle(ref,v[i],halfAngle=halfAngle) for i in range(data.shape[0])]
     return np.array(ba)
-    
+
 
 def get_bearing(data : pd.DataFrame, source : list[float] = [0,0],
             halfAngle : bool = True, head : bool = False, fromMotion : bool = False) -> np.ndarray:

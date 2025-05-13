@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 import json
-import utils
+from swap_correction import utils
 
 
 # ----- Static Parameters -----

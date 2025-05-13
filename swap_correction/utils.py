@@ -79,20 +79,6 @@ def get_bounds(data : np.ndarray, buffer : float = 0.05, floor : float = None, c
     return (a,b)
 
 
-def get_min_length(samples : list[np.ndarray]) -> int:
-    '''get min length of an array in list of arrays'''
-    sampleLength = [len(sample) for sample in samples]
-    nframes = min(sampleLength)
-    return nframes
-
-
-def get_max_length(samples : list[np.ndarray]) -> int:
-    '''get max length of an array in list of arrays'''
-    sampleLength = [len(sample) for sample in samples]
-    nframes = max(sampleLength)
-    return nframes
-
-
 def create_sample_matrix(samples : list[np.ndarray],
                          length : int | None = None, toMin : bool = True) -> np.ndarray:
     '''
