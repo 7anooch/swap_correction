@@ -6,18 +6,17 @@ from swap_correction import plotting, utils, metrics
 from swap_correction import tracking_correction as tc
 from swap_correction import pivr_loader as loader
 
-
 FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
 
 FIX_SWAPS = True # correct head-tail swaps using single-frame flags
 VALIDATE = False # attempt to correct missed swaps using segment-based metrics (NOTE: currently not recommended!)
 REMOVE_ERRORS = True # set position values in frames where head / tail overlap to NaN
-INTERPOLATE = True # interpolate over short overlap segments
+INTERPOLATE = False # interpolate over short overlap segments
 FILTER_DATA = False # filter data before exporting (not recommended)
 
 DEBUG = False # print debug messages
 DIAGNOSTIC_PLOTS = True # generate and save diagnostic figures
-SHOW_PLOTS = True # display diagnostic figures after saving (if generated)
+SHOW_PLOTS = False # display diagnostic figures after saving (if generated)
 TIMES = None#(200,230) # start and end times to show on plots (None -> show entire trajectory)
 
 

@@ -47,7 +47,7 @@ def get_sample_directories(sourceDir : str) -> list[str]:
     return valid
 
 
-def load_raw_data(mainPath : str, fileName : str | None = None, px2mm : bool = True) -> pd.DataFrame:
+def load_raw_data(mainPath : str, fileName : str | None = None, px2mm : bool = False) -> pd.DataFrame:
     """
     Load raw data from csv and convert from PiVR format to analysis pipeline format
 
