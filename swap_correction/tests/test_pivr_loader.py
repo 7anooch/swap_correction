@@ -54,13 +54,6 @@ def test_load_raw_data(fake_raw_data, fake_settings):
         assert isinstance(df, pd.DataFrame)
         assert 'stimulus' in df.columns
         assert 'xhead' in df.columns
-        assert np.allclose(df['xhead'], (fake_raw_data['X-Head'] - 10) / 2)
-
-    # Test with px2mm=False
-    with mock.patch('swap_correction.utils.read_csv', return_value=fake_raw_data), \
-         mock.patch('swap_correction.pivr_loader.get_settings', return_value=(30, 2, np.array([10, 20]))), \
-         mock.patch('swap_correction.pivr_loader._retrieve_raw_data', return_value=(fake_raw_data, 'data.csv')):
-        df = pivr_loader.load_raw_data('/main', px2mm=False)
         assert np.allclose(df['xhead'], fake_raw_data['X-Head'])
 
 def test__retrieve_raw_data(fake_raw_data):
@@ -85,7 +78,7 @@ def test_export_to_PiVR(tmp_path, fake_raw_data):
             'xmid': [9, 10], 'ymid': [11, 12], 'xctr': [13, 14], 'yctr': [15, 16],
             'xmin': [17, 18], 'ymin': [19, 20], 'xmax': [21, 22], 'ymax': [23, 24]
         })
-        pivr_loader.export_to_PiVR(str(tmp_path), data, suffix='test', mm2px=True)
+        pivr_loader.export_to_PiVR(str(tmp_path), data, suffix='test')
         # Check that the file was created
         files = list(tmp_path.glob('*.csv'))
         assert any('test' in f.name for f in files)
@@ -118,9 +111,6 @@ def test_get_settings(tmp_path):
     assert fps == 30
     assert ppmm == 3  # uses updated value
     assert np.allclose(source, [10, 20])
-    # Test mmSource=True
-    fps, ppmm, source = pivr_loader.get_settings(str(tmp_path), mmSource=True)
-    assert np.allclose(source, [10/3, 20/3])
     # Test with no source keys
     settings2 = {'Framerate': 10, 'Pixel per mm': 1}
     with open(settings_path, 'w') as f:

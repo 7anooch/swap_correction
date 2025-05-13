@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     # retrieve sample directories / detect if target directory is single sample
     samples = utils.get_dirs(sourceDir) # get list of directories in target directory
-    if len(samples) == 0: # single trial should not contain sub-folders
+    if len(samples) == 0: # single trial should not contain sub-folders 
         samples = [sourceDir]
     nsamples = len(samples)
     

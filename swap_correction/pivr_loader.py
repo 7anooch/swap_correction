@@ -47,17 +47,15 @@ def get_sample_directories(sourceDir : str) -> list[str]:
     return valid
 
 
-def load_raw_data(mainPath : str, fileName : str | None = None, px2mm : bool = False) -> pd.DataFrame:
+def load_raw_data(mainPath : str, fileName : str | None = None) -> pd.DataFrame:
     """
     Load raw data from csv and convert from PiVR format to analysis pipeline format
 
     fileName: name of file; if None, search for and load original PiVR output file
-    px2mm: convert position data from px to mm and centers trajectory on source
     """
     # load raw data
     if fileName is None : rawData, _ = _retrieve_raw_data(mainPath) # find and load PiVR file
     else : rawData = utils.read_csv(os.path.join(mainPath,fileName))
-    _fps, ppmm, source = get_settings(mainPath,mmSource=False)
     data = pd.DataFrame()
 
     # TODO: add compatability for multiple stim channels
@@ -68,11 +66,8 @@ def load_raw_data(mainPath : str, fileName : str | None = None, px2mm : bool = F
             break
 
     # load position data
-    # optionally move origin to odor source and convert from px to mm
     for i in range(len(PIVRCOLS)):
-        idx = i % 2 # alternates between 0 and 1 -> x and y
-        if px2mm : data[NEWCOLS[i]] = (rawData[PIVRCOLS[i]].to_numpy() - source[idx]) / ppmm
-        else : data[NEWCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
+        data[NEWCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
 
     return data
 
@@ -94,28 +89,26 @@ def import_analysed_data(sourceDir : str, fileName : str = ANALYZED_DATA) -> pd.
 
 
 def export_to_PiVR(sourceDir : pd.DataFrame, data : pd.DataFrame, 
-                   suffix : str = 'level1', mm2px : bool = True) -> None:
+                   suffix : str = 'level1') -> None:
     """
     Export data to PiVR-compatible csv file
 
     sourceDir: directory containing reference data
     data: data to export
     fileName: name of exported file
-    mm2px: convert data from mm to px
     """
-    # import raw data
-    _fps, ppmm, source = get_settings(sourceDir,mmSource=False)
     rawData, dataPath = _retrieve_raw_data(sourceDir)
 
     # transform filtered position data and copy back into source dataframe 
     for i in range(len(PIVRCOLS)):
-        idx = i % 2 # alternates between 0 and 1
-        if mm2px : rawData[PIVRCOLS[i]] = data[NEWCOLS[i]].to_numpy() * ppmm + source[idx]
-        else : rawData[PIVRCOLS[i]] = data[NEWCOLS[i]].to_numpy()
+        rawData[PIVRCOLS[i]] = data[NEWCOLS[i]].to_numpy()
 
     rawDataFilename = os.path.basename(dataPath)
     name = rawDataFilename.split('.csv')[0]
     newFileName = f"{name}_{suffix}.csv"
+
+    if 'Unnamed: 0' in rawData.columns:
+        rawData = rawData.drop(columns=['Unnamed: 0'])
 
     # export
     filePath = os.path.join(sourceDir,newFileName)
@@ -138,11 +131,10 @@ def get_all_settings(mainPath : str, fileName : str = PIVR_SETTINGS) -> dict:
         return None
 
 
-def get_settings(mainPath : str, mmSource : bool = False) -> tuple:
+def get_settings(mainPath : str) -> tuple:
     '''
     retrieves fps, ppmm, and source position (mm) from experiment settings json
     mainPath: directory containing settings json
-    mmSource: convert source from pixels to mm
     '''
     settings = get_all_settings(mainPath)
     settings_updated = get_all_settings(mainPath,PIVR_SETTINGS_UPDATED)
@@ -155,7 +147,6 @@ def get_settings(mainPath : str, mmSource : bool = False) -> tuple:
     # if no source entry (odor-less assay), set source to (0,0)
     if 'Source x' in settings.keys():
         source = np.array([settings['Source x'],settings['Source y']])
-        if mmSource : source = source / ppmm
     else:
         source = np.zeros(2)
 
