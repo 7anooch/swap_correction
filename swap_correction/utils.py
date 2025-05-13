@@ -95,7 +95,7 @@ def create_sample_matrix(samples : list[np.ndarray],
     vec = np.zeros((len(samples),length))
     for i in range(len(samples)):
         if sampleLength[i] < length: # fill sample with NaNs to desired length
-            vec[i,:] = list(samples[i]) + [np.NaN] * (length - sampleLength[i])
+            vec[i,:] = list(samples[i]) + [np.nan] * (length - sampleLength[i])
         else: # truncate sample
             vec[i,:] = samples[i][:length]
     return vec
@@ -531,7 +531,7 @@ def get_cross_segment_deltas(segments : list[tuple[int,int]] | np.ndarray,
     vals = np.unwrap(vec) if angular else vec.copy() # unswap if necessary
 
     # extract deltas
-    delta = np.full((segs.shape[0]),np.NaN,dtype=float)
+    delta = np.full((segs.shape[0]),np.nan,dtype=float)
     for i, seg in enumerate(segs):
         a, b = seg + pad # get segment start / end and apply offset
         if a >= 0 and b < vals.shape[0]:
