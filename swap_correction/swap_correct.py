@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from swap_correction import plotting, utils, metrics
-from swap_correction import tracking_correction as tc
+from swap_correction.tracking import tracking_correction
 from swap_correction import pivr_loader as loader
 
 FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
@@ -11,7 +11,7 @@ FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
 FIX_SWAPS = True # correct head-tail swaps using single-frame flags
 VALIDATE = False # attempt to correct missed swaps using segment-based metrics (NOTE: currently not recommended!)
 REMOVE_ERRORS = True # set position values in frames where head / tail overlap to NaN
-INTERPOLATE = False # interpolate over short overlap segments
+INTERPOLATE = True # interpolate over short overlap segments
 FILTER_DATA = False # filter data before exporting (not recommended)
 
 DEBUG = False # print debug messages
@@ -191,7 +191,7 @@ if __name__ == '__main__':
         if True: # set to false to skip filtering and just plot
             data = loader.load_raw_data(sample)
             fps = loader.get_all_settings(sample)['Framerate']
-            data = tc.tracking_correction(
+            data = tracking_correction(
                 data, fps,
                 filterData=FILTER_DATA,
                 swapCorrection=FIX_SWAPS,
@@ -199,9 +199,10 @@ if __name__ == '__main__':
                 removeErrors=REMOVE_ERRORS,
                 interp=INTERPOLATE,
                 debug=DEBUG
-                )
-            loader.export_to_PiVR(sample,data) #,FILE_NAME)
+            )
+            loader.export_to_PiVR(sample, data, suffix='level1')
 
+        # generate diagnostic plots
         if DIAGNOSTIC_PLOTS:
             compare_filtered_trajectories(sample,show=SHOW_PLOTS,times=TIMES)
             # compare_filtered_distributions(sample,show=SHOW_PLOTS)

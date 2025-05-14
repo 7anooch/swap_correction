@@ -1,5 +1,15 @@
 # Swap Correction Codebase Dependency Analysis
 
+## Progress Update (June 2024)
+- **Modularization Complete:** The core tracking correction logic has been split into `flagging`, `filtering`, and `correction` modules under `swap_correction/tracking/`.
+- **Direct Unit Tests Added:** New direct unit tests for all public functions in the new modules (`flagging`, `filtering`, `correction`) have been implemented and are passing.
+- **Legacy Code Isolated:** All original scripts have been moved to a `legacy/` folder for reference and are excluded from testing.
+- **Circular Imports Fixed:** All imports are now absolute to avoid circular dependencies.
+- **Configuration Updated:** The main entry point (`swap_correct.py`) now uses the new modular structure and enables interpolation by default.
+- **Next Steps:** Continue with configuration cleanup, further documentation, and removal or deprecation of any remaining unused code.
+
+---
+
 ## Function-Level Dependency Tree
 
 ### Main Entry Point (`swap_correct.py`)
@@ -25,7 +35,6 @@ main()
     │   ├── utils.indices_to_segments()
     │   ├── correct_swapped_segments()
     │   └── correct_global_swap()
-    │       ├── filter_data()
     │       └── metrics.get_speed_from_df()
     ├── validate_corrected_data() [DISABLED]
     │   ├── get_swapped_segments()
@@ -34,11 +43,9 @@ main()
     │   ├── get_overlap_edges()
     │   ├── flag_discontinuities()
     │   └── utils.filter_array()
-    ├── interpolate_gaps() [DISABLED]
-    │   ├── utils.get_value_segments()
-    │   └── utils.ranges_to_list()
-    └── filter_data() [DISABLED]
-        └── filter_gaussian()
+    └── interpolate_gaps() [DISABLED]
+        ├── utils.get_value_segments()
+        └── utils.ranges_to_list()
 ```
 
 ### Utility Functions (`utils.py`)
@@ -76,17 +83,12 @@ metrics.py
    - `compare_filtered_distributions()`
    - `examine_flags()`
 
-2. **Unused Filter Functions**:
-   - `filter_gaussian()` - defined but never called directly
-   - `filter_meanmed()` - defined but never called
-   - `filter_median()` - defined but never called
-
-3. **Redundant Flag Functions**:
+2. **Redundant Flag Functions**:
    - `flag_min_delta_mismatches()` - redundant with `flag_delta_mismatches()`
    - `flag_overlap_mismatches()` - not used in main correction flow
    - `flag_overlap_minimum_mismatches()` - not used in main correction flow
 
-4. **Legacy Functions**:
+3. **Legacy Functions**:
    - `_get_alignment_angles_legacy()` - newer version exists
 
 ### Disabled Features
@@ -94,7 +96,6 @@ metrics.py
    ```python
    VALIDATE = False      # validate_corrected_data() is not used
    INTERPOLATE = False   # interpolate_gaps() is not used
-   FILTER_DATA = False   # filter_data() is not used
    SHOW_PLOTS = False    # Plotting functionality is disabled
    ```
 
@@ -102,7 +103,6 @@ metrics.py
 
 ### 1. Code Removal
 - Remove all commented out functions
-- Remove unused filter functions or consolidate into a single filtering module
 - Remove redundant flag functions or document their purpose
 - Remove legacy functions or mark them with proper deprecation warnings
 

@@ -28,9 +28,15 @@ dev = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=swap_correction --cov-report=term-missing"
+norecursedirs = ["legacy", "swap_correction/legacy"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",
+]
+
+[tool.coverage.run]
+omit = [
+    "swap_correction/legacy/*"
 ]
 
 [tool.black]
