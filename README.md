@@ -1,101 +1,95 @@
 # Swap Correction
 
-A Python package for correcting tracking data in behavioral experiments, particularly focused on handling identity swaps and tracking artifacts.
+A Python package for correcting head-tail swaps and tracking errors in animal tracking data.
 
 ## Overview
 
-This package provides tools for:
-- Loading and processing tracking data
-- Detecting and correcting identity swaps
-- Computing behavioral metrics
-- Visualizing tracking and correction results
-- Kalman filtering for smooth trajectories
+Swap Correction provides functions for:
+- Detecting and correcting head-tail swaps
+- Filtering tracking data
+- Calculating various metrics
+- Handling common tracking errors
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/swap_correction.git
-cd swap_correction
+pip install swap-correction
+```
 
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install the package in development mode
-pip install -e .
+For development installation:
+```bash
+git clone https://github.com/your-username/swap-correction.git
+cd swap-correction
+pip install -e ".[dev]"
 ```
 
 ## Quick Start
 
 ```python
-from swap_correction import tracking_correction, metrics, plotting
+import pandas as pd
+from swap_correction.tracking import tracking_correction
 
-# Load tracking data
-data = tracking_correction.load_data("path/to/tracking_data.csv")
+# Load your tracking data
+data = pd.read_csv('tracking_data.csv')
 
-# Detect and correct swaps
-corrected_data = tracking_correction.correct_swaps(data)
+# Apply swap correction
+corrected_data = tracking_correction(
+    data=data,
+    fps=30.0,
+    filterData=True,
+    swapCorrection=True,
+    validate=True,
+    removeErrors=True,
+    interp=True
+)
 
-# Compute behavioral metrics
-metrics = metrics.compute_metrics(corrected_data)
-
-# Visualize results
-plotting.plot_trajectories(corrected_data)
+# Save the corrected data
+corrected_data.to_csv('corrected_data.csv', index=False)
 ```
 
 ## Features
 
-### Tracking Correction
-- Automatic detection of identity swaps
-- Correction using multiple strategies (e.g., distance-based, velocity-based)
-- Support for multiple tracked objects
-- Configurable correction parameters
+- Multiple swap detection methods:
+  - Overlap detection
+  - Sign reversal detection
+  - Delta mismatch detection
+  - Overlap sign reversal detection
+  - Overlap minimum mismatch detection
 
-### Metrics
-- Speed and velocity calculations
-- Distance and angle measurements
-- Behavioral state classification
-- Custom metric computation
+- Data filtering options:
+  - Gaussian filter
+  - Savitzky-Golay filter
+  - Median filter
+  - Mean-median filter
 
-### Visualization
-- Trajectory plotting
-- Swap detection visualization
-- Metric time series
-- Interactive plots
-
-### Utilities
-- File I/O operations
-- Data preprocessing
-- Array manipulation
-- Statistical analysis
+- Metrics calculation:
+  - Position metrics (separation, vectors)
+  - Angle metrics (head angle, orientation)
+  - Motion metrics (speed, tortuosity)
 
 ## Documentation
 
-Detailed documentation is available in the `docs` directory:
-- [API Reference](docs/api.md)
-- [User Guide](docs/user_guide.md)
-- [Examples](docs/examples.md)
-- [Contributing Guidelines](docs/contributing.md)
+- [Installation Guide](docs/guides/installation.md)
+- [Quick Start Guide](docs/guides/quickstart.md)
+- [Core Concepts](docs/guides/core_concepts.md)
+- [API Reference](docs/api/main.md)
+- [Examples](docs/examples/basic_usage.md)
+- [Contributing Guide](docs/contributing.md)
+- [FAQ](docs/faq.md)
 
-## Testing
+## Requirements
 
-Run the test suite:
-```bash
-pytest
-```
+- Python 3.8 or higher
+- numpy
+- pandas
+- scipy
 
-Run with coverage:
-```bash
-pytest --cov=swap_correction
-```
+Optional:
+- matplotlib (for visualization)
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see our [Contributing Guide](docs/contributing.md) for details.
 
 ## License
 
@@ -104,15 +98,38 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Citation
 
 If you use this package in your research, please cite:
-```
-@software{swap_correction2024,
+
+```bibtex
+@software{swap_correction,
   author = {Your Name},
   title = {Swap Correction},
   year = {2024},
-  url = {https://github.com/yourusername/swap_correction}
+  url = {https://github.com/your-username/swap-correction}
 }
 ```
 
+## Acknowledgments
+
+- Thanks to all contributors
+- Inspired by various tracking analysis tools
+- Built with support from the community
+
 ## Contact
 
-For questions and support, please open an issue on GitHub or contact [your-email@example.com].
+- GitHub Issues: [Create an issue](https://github.com/your-username/swap-correction/issues)
+- Email: [your-email@example.com](mailto:your-email@example.com)
+
+## Notes
+
+1. This package is under active development
+2. Bug reports and feature requests are welcome
+3. Documentation is continuously updated
+4. Community contributions are encouraged
+
+## See Also
+
+- [Documentation](docs/index.md)
+- [Changelog](docs/changelog.md)
+- [Code of Conduct](docs/code_of_conduct.md)
+- [Contributing Guide](docs/contributing.md)
+- [FAQ](docs/faq.md)

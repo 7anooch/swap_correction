@@ -7,6 +7,8 @@ from swap_correction.tracking import tracking_correction
 from swap_correction import pivr_loader as loader
 
 FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
+FILE_SUFFIX = 'level1'
+# FILE_SUFFIX = 'test'
 
 FIX_SWAPS = True # correct head-tail swaps using single-frame flags
 VALIDATE = False # attempt to correct missed swaps using segment-based metrics (NOTE: currently not recommended!)
@@ -33,11 +35,10 @@ def compare_filtered_trajectories(mainPath : str, outputPath : str = None,
     show: display the figure after saving
     '''
     # ----- Data Retrieval -----
-    suffix = 'level1'
     _, dataPath = loader._retrieve_raw_data(mainPath)
     rawDataFilename = os.path.basename(dataPath)
     name = rawDataFilename.split('.csv')[0]
-    newFileName = f"{name}_{suffix}.csv"
+    newFileName = f"{name}_{FILE_SUFFIX}.csv"
 
     fps = loader.get_all_settings(mainPath)['Framerate']
     rawData = loader.load_raw_data(mainPath)
@@ -200,7 +201,7 @@ if __name__ == '__main__':
                 interp=INTERPOLATE,
                 debug=DEBUG
             )
-            loader.export_to_PiVR(sample, data, suffix='level1')
+            loader.export_to_PiVR(sample, data, suffix=FILE_SUFFIX)
 
         # generate diagnostic plots
         if DIAGNOSTIC_PLOTS:

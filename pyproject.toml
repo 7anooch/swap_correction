@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "swap_correction"
@@ -27,7 +27,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --cov=swap_correction --cov-report=term-missing"
+addopts = "--cov=swap_correction --cov-report=term-missing"
 norecursedirs = ["legacy", "swap_correction/legacy"]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -41,9 +41,16 @@ omit = [
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ['py38']
 include = '\.pyi?$'
 
 [tool.isort]
 profile = "black"
-multi_line_output = 3 
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true 

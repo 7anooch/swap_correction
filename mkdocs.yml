@@ -1,0 +1,73 @@
+site_name: Swap Correction Documentation
+site_description: Comprehensive documentation for the Swap Correction package
+site_author: Your Name
+repo_url: https://github.com/yourusername/swap_correction
+repo_name: swap_correction
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - search.share
+    - search.suggest
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed
+  - pymdownx.arithmatex
+  - pymdownx.emoji
+  - admonition
+  - footnotes
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: guides/installation.md
+    - Quick Start: guides/quickstart.md
+    - Configuration: guides/configuration.md
+  - User Guide:
+    - Core Concepts: guides/core_concepts.md
+    - Swap Detection: guides/swap_detection.md
+    - Data Processing: guides/data_processing.md
+    - Error Handling: guides/error_handling.md
+  - API Reference:
+    - Main Module: api/main.md
+    - Tracking Module: api/tracking.md
+    - Flagging Module: api/flagging.md
+    - Filtering Module: api/filtering.md
+    - Metrics Module: api/metrics.md
+    - Utils Module: api/utils.md
+    - Function Reference: api/functions.md
+  - Examples:
+    - Basic Usage: examples/basic_usage.md
+    - Advanced Usage: examples/advanced_usage.md
+    - Custom Filters: examples/custom_filters.md
+  - Legacy Code:
+    - Overview: legacy/overview.md
+    - Migration Guide: legacy/migration.md
+    - Deprecated Features: legacy/deprecated.md
+  - Contributing:
+    - Development Guide: contributing/development.md
+    - Code Style: contributing/code_style.md
+    - Testing: contributing/testing.md 
