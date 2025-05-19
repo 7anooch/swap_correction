@@ -7,6 +7,9 @@ import pandas as pd
 from swap_correction import utils, metrics
 from swap_correction.tracking import flagging
 from swap_correction.tracking import filtering
+import logging
+
+logging.basicConfig(level=logging.INFO)  # or logging.DEBUG for more detail
 
 def tracking_correction(data: pd.DataFrame, fps: float, filterData: bool = False,
                        swapCorrection: bool = True, validate: bool = False,
@@ -139,7 +142,7 @@ def correct_global_swap(data: pd.DataFrame, debug: bool = False) -> pd.DataFrame
     # If mean separation is negative, swap is needed
     if np.nanmean(dist) < 0:
         if debug:
-            print("Correcting global swap")
+            logging.info("Correcting global swap")
         
         # Swap head and tail columns
         for hcol, tcol in zip(metrics.POSDICT['head'], metrics.POSDICT['tail']):
@@ -151,7 +154,7 @@ def correct_swapped_segments(data: pd.DataFrame, start: int, end: int,
                            debug: bool = False) -> pd.DataFrame:
     """Correct a segment of swapped frames."""
     if debug:
-        print(f"Correcting segment {start}-{end}")
+        logging.info(f"Correcting segment {start}-{end}")
     
     # Swap head and tail columns for the segment
     for hcol, tcol in zip(metrics.POSDICT['head'], metrics.POSDICT['tail']):

@@ -5,6 +5,7 @@ Functions for detecting potential head-tail swaps and tracking errors.
 import numpy as np
 import pandas as pd
 from swap_correction import utils, metrics
+import logging
 
 def flag_all_swaps(data: pd.DataFrame, fps: float, debug: bool = False) -> np.ndarray:
     """Flag all potential head-tail swaps using multiple detection methods."""
@@ -42,7 +43,7 @@ def flag_discontinuities(data: pd.DataFrame, point: str, fps: float, debug: bool
     flags = np.where(speed > threshold)[0]
     
     if debug:
-        print(f"Found {len(flags)} discontinuities in {point} data")
+        logging.info(f"Found {len(flags)} discontinuities in {point} data")
     
     return flags
 
@@ -60,7 +61,7 @@ def flag_delta_mismatches(data: pd.DataFrame, debug: bool = False) -> np.ndarray
     flags = np.where(change_magnitude > threshold)[0] + 1  # +1 because of diff
     
     if debug:
-        print(f"Found {len(flags)} delta mismatches")
+        logging.info(f"Found {len(flags)} delta mismatches")
     
     return flags
 
@@ -76,7 +77,7 @@ def flag_sign_reversals(data: pd.DataFrame, debug: bool = False) -> np.ndarray:
     flags = np.where(dot_products < 0)[0] + 1  # +1 because of diff
     
     if debug:
-        print(f"Found {len(flags)} sign reversals")
+        logging.info(f"Found {len(flags)} sign reversals")
     
     return flags
 
@@ -90,7 +91,7 @@ def flag_overlaps(data: pd.DataFrame, debug: bool = False) -> np.ndarray:
     flags = np.where(dist < threshold)[0]
     
     if debug:
-        print(f"Found {len(flags)} overlaps")
+        logging.info(f"Found {len(flags)} overlaps")
     
     return flags
 
@@ -109,7 +110,7 @@ def flag_overlap_sign_reversals(data: pd.DataFrame, debug: bool = False) -> np.n
     flags = olap[np.where(dot_products < 0)[0] + 1]  # +1 because of diff
     
     if debug:
-        print(f"Found {len(flags)} overlap sign reversals")
+        logging.info(f"Found {len(flags)} overlap sign reversals")
     
     return flags
 
@@ -157,6 +158,6 @@ def flag_overlap_minimum_mismatches(data: pd.DataFrame, debug: bool = False) -> 
             flags.append(start + min_idx)
     
     if debug:
-        print(f"Found {len(flags)} overlap minimum mismatches")
+        logging.info(f"Found {len(flags)} overlap minimum mismatches")
     
     return np.array(flags) 

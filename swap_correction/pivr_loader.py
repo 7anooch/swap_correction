@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 from swap_correction import utils
+import logging
 
 
 # ----- Static Parameters -----
@@ -163,7 +164,7 @@ def import_distance_data(data : pd.DataFrame, sourceDir: str, fileName = DISTANC
     startFrame = data['Frame'][0] # data and distance records start on different frames
     distance = utils.read_csv(distancePath).iloc[startFrame:,1]
     distance = distance.reset_index(drop=True) # reset indices so distances assigned to correct frames
-    print(type(distance))
+    logging.debug(type(distance))
     return distance
 
 

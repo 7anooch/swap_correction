@@ -5,6 +5,7 @@ import os
 from swap_correction import plotting, utils, metrics
 from swap_correction import tracking_correction as tc
 from swap_correction import pivr_loader as loader
+import logging
 
 FILE_NAME = loader.FILTERED_DATA # name of new file to export corrected data to
 
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     # filter data
     end = '\n' if DEBUG else '\r' # ensure debug messages don't overwrite sample count
     for i, sample in enumerate(samples):
-        print('Sample %d/%d' % (i+1,nsamples),end=end)
+        logging.info('Sample %d/%d' % (i+1,nsamples),end=end)
 
         if True: # set to false to skip filtering and just plot
             data = loader.load_raw_data(sample)
@@ -208,4 +209,4 @@ if __name__ == '__main__':
             #examine_flags(sample,show=SHOW_PLOTS,times=TIMES,labelFrames=True)
             if SHOW_PLOTS : plt.show()
 
-    print('Finished ')
+    logging.info('Finished ')
