@@ -11,6 +11,7 @@ from swap_correction.tracking.filtering import (
     filter_meanmed,
     filter_median
 )
+import logging
 
 @pytest.fixture
 def simple_data():
@@ -207,26 +208,22 @@ def test_filter_median(float_simple_data):
     assert isinstance(out, pd.DataFrame)
     assert set(out.columns) == set(float_simple_data.columns)
 
-def test_remove_edge_frames_debug(float_simple_data, capsys):
+def test_remove_edge_frames_debug(float_simple_data, caplog):
     # Patch utils.flatten and metrics.POSDICT
     with mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: sum(x, [])), \
          mock.patch('swap_correction.tracking.correction.correction.metrics.POSDICT', {'head': ['xhead', 'yhead'], 'tail': ['xtail', 'ytail'], 'mid': ['xmid', 'ymid'], 'ctr': ['xctr', 'yctr']}):
         tracking_correction.remove_edge_frames(float_simple_data)
-        captured = capsys.readouterr()
-        # No debug output in current implementation
-        assert captured.out == ''
+        assert "Found" not in caplog.text
 
-def test_remove_overlaps_debug(float_simple_data, capsys):
+def test_remove_overlaps_debug(float_simple_data, caplog):
     # Patch get_overlap_edges, flag_discontinuities, utils.flatten
     with mock.patch('swap_correction.tracking.flagging.flags.get_overlap_edges', return_value=(np.array([0]), np.array([1]))), \
          mock.patch('swap_correction.tracking.flagging.flags.flag_discontinuities', return_value=np.array([0])), \
          mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: ['xhead', 'yhead', 'xtail', 'ytail', 'xmid', 'ymid', 'xctr', 'yctr']):
         tracking_correction.remove_overlaps(float_simple_data)
-        captured = capsys.readouterr()
-        # No debug output in current implementation
-        assert captured.out == ''
+        assert "Found" not in caplog.text
 
-def test_flag_all_swaps_debug(float_simple_data, capsys):
+def test_flag_all_swaps_debug(float_simple_data, caplog):
     # Patch all the individual flagging functions
     with mock.patch('swap_correction.tracking.flagging.flags.flag_discontinuities', return_value=np.array([1])), \
          mock.patch('swap_correction.tracking.flagging.flags.flag_delta_mismatches', return_value=np.array([2])), \
@@ -239,48 +236,48 @@ def test_flag_all_swaps_debug(float_simple_data, capsys):
         assert isinstance(result, np.ndarray)
         assert len(result) > 0
 
-def test_flag_discontinuities_debug(float_simple_data, capsys):
+def test_flag_discontinuities_debug(float_simple_data, caplog):
     # Patch metrics.get_delta_between_frames
     with mock.patch('swap_correction.tracking.flagging.flags.metrics.get_delta_between_frames', return_value=np.array([0, 25, 10])):
-        flagging.flag_discontinuities(float_simple_data, point='head', fps=30, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out
+        with caplog.at_level(logging.INFO):
+            flagging.flag_discontinuities(float_simple_data, point='head', fps=30, debug=True)
+        assert "Found" in caplog.text
 
-def test_flag_delta_mismatches_debug(float_simple_data, capsys):
+def test_flag_delta_mismatches_debug(float_simple_data, caplog):
     # Patch get_all_deltas
     with mock.patch('swap_correction.tracking.flagging.flags.get_all_deltas', return_value=(np.array([1, 2]), np.array([1, 2]), np.array([1, 2]), np.array([1, 2]))):
-        flagging.flag_delta_mismatches(float_simple_data, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out
+        with caplog.at_level(logging.INFO):
+            flagging.flag_delta_mismatches(float_simple_data, debug=True)
+        assert "Found" in caplog.text
 
-def test_flag_sign_reversals_debug(float_simple_data, capsys):
+def test_flag_sign_reversals_debug(float_simple_data, caplog):
     # Patch metrics.get_ht_cross_sign and metrics.get_head_angle
     with mock.patch('swap_correction.tracking.flagging.flags.metrics.get_ht_cross_sign', return_value=np.array([1, -1, 1])), \
          mock.patch('swap_correction.tracking.flagging.flags.metrics.get_head_angle', return_value=np.array([np.pi, np.pi, np.pi])):
-        flagging.flag_sign_reversals(float_simple_data, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out
+        with caplog.at_level(logging.INFO):
+            flagging.flag_sign_reversals(float_simple_data, debug=True)
+        assert "Found" in caplog.text
 
-def test_flag_overlaps_debug(float_simple_data, capsys):
+def test_flag_overlaps_debug(float_simple_data, caplog):
     # Patch metrics.perfectly_overlapping
     with mock.patch('swap_correction.tracking.flagging.flags.metrics.perfectly_overlapping', return_value=np.array([0, 2])):
-        flagging.flag_overlaps(float_simple_data, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out
+        with caplog.at_level(logging.INFO):
+            flagging.flag_overlaps(float_simple_data, debug=True)
+        assert "Found" in caplog.text
 
-def test_flag_overlap_minimum_mismatches_debug(float_simple_data, capsys):
+def test_flag_overlap_minimum_mismatches_debug(float_simple_data, caplog):
     # Patch get_overlap_edges, get_all_deltas
     with mock.patch('swap_correction.tracking.flagging.flags.get_overlap_edges', return_value=np.array([[0, 1], [2, 3]])), \
          mock.patch('swap_correction.tracking.flagging.flags.get_all_deltas', return_value=np.array([[1, 2], [1, 2], [3, 4], [5, 6]])):
-        flagging.flag_overlap_minimum_mismatches(float_simple_data, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out
+        with caplog.at_level(logging.INFO):
+            flagging.flag_overlap_minimum_mismatches(float_simple_data, debug=True)
+        assert "Found" in caplog.text
 
-def test_flag_overlap_sign_reversals_debug(float_simple_data, capsys):
+def test_flag_overlap_sign_reversals_debug(float_simple_data, caplog):
     # Patch get_overlap_edges, metrics.get_ht_cross_sign, metrics.get_head_angle
     with mock.patch('swap_correction.tracking.flagging.flags.get_overlap_edges', return_value=np.array([[0, 1], [1, 2]])), \
          mock.patch('swap_correction.tracking.flagging.flags.metrics.get_ht_cross_sign', return_value=np.array([1, -1, 1])), \
          mock.patch('swap_correction.tracking.flagging.flags.metrics.get_head_angle', return_value=np.array([np.pi, np.pi, np.pi])):
-        flagging.flag_overlap_sign_reversals(float_simple_data, debug=True)
-        captured = capsys.readouterr()
-        assert "Found" in captured.out 
+        with caplog.at_level(logging.INFO):
+            flagging.flag_overlap_sign_reversals(float_simple_data, debug=True)
+        assert "Found" in caplog.text 

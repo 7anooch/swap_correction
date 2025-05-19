@@ -51,7 +51,7 @@ def test_filter_ranges(sample_ranges, sample_filter_ranges):
     """Test range filtering functionality."""
     filtered = utils.filter_ranges(sample_ranges, sample_filter_ranges)
     expected = [(1, 1), (4, 5), (7, 9), (16, 18)]
-    assert filtered == expected
+    assert np.array_equal(filtered, np.array(expected))
 
 
 def test_merge():
@@ -388,4 +388,90 @@ def test_metrics_by_segment():
         [1.5, 0.5, 1.5],
         [4.5, 0.5, 4.5]
     ])
-    assert np.allclose(result, expected) 
+    assert np.allclose(result, expected)
+
+
+def test_filter_array_edge_cases():
+    a = [1, 2, 3, 4]
+    b = [2, 4]
+    result = utils.filter_array(a, b)
+    assert np.array_equal(result, np.array([1, 3]))
+    # Edge case: b is empty
+    result = utils.filter_array(a, [])
+    assert np.array_equal(result, np.array([1, 2, 3, 4]))
+    # Edge case: a is empty
+    result = utils.filter_array([], b)
+    assert np.array_equal(result, np.array([]))
+    # Edge case: both empty
+    result = utils.filter_array([], [])
+    assert np.array_equal(result, np.array([]))
+
+
+def test_get_cross_segment_deltas_basic():
+    segments = [(0, 1), (2, 3)]
+    vec = np.array([1, 2, 3, 4])
+    result = utils.get_cross_segment_deltas(segments, vec)
+    assert isinstance(result, np.ndarray)
+    # Edge case: empty segments
+    result = utils.get_cross_segment_deltas([], vec)
+    assert isinstance(result, np.ndarray)
+    # Edge case: empty vec
+    result = utils.get_cross_segment_deltas(segments, np.array([]))
+    assert isinstance(result, np.ndarray)
+
+
+def test_get_intervals_edge_cases():
+    # Edge case: empty idxs
+    result = utils.get_intervals([], nframes=10)
+    assert isinstance(result, list)
+    # Edge case: addBounds False
+    result = utils.get_intervals([1, 2, 3], nframes=5, addBounds=False)
+    assert isinstance(result, list)
+    # Edge case: alternating True
+    result = utils.get_intervals([1, 2, 3], nframes=5, alternating=True)
+    assert isinstance(result, list)
+
+
+def test_indices_to_segments_edge_cases():
+    # Edge case: empty idxs
+    result = utils.indices_to_segments([], nframes=10)
+    assert isinstance(result, list)
+    # Edge case: addBounds False
+    result = utils.indices_to_segments([1, 2, 3], nframes=5, addBounds=False)
+    assert isinstance(result, list)
+    # Edge case: alternating True
+    result = utils.indices_to_segments([1, 2, 3], nframes=5, alternating=True)
+    assert isinstance(result, list)
+
+
+def test_get_value_segments_edge_cases():
+    vec = np.array([1, 2, 2, 3, 1])
+    # Basic
+    result = utils.get_value_segments(vec, 2)
+    assert isinstance(result, np.ndarray)
+    # Edge case: equalTo False
+    result = utils.get_value_segments(vec, 2, equalTo=False)
+    assert isinstance(result, np.ndarray)
+    # Edge case: inclusive False
+    result = utils.get_value_segments(vec, 2, inclusive=False)
+    assert isinstance(result, np.ndarray)
+    # Edge case: empty vec
+    result = utils.get_value_segments(np.array([]), 2)
+    assert isinstance(result, np.ndarray)
+
+
+def test_filter_ranges_edge_cases():
+    base = [(0, 2), (4, 6)]
+    filt = [(1, 3)]
+    # Basic
+    result = utils.filter_ranges(base, filt)
+    assert isinstance(result, np.ndarray)
+    # Edge case: empty base
+    result = utils.filter_ranges([], filt)
+    assert isinstance(result, np.ndarray)
+    # Edge case: empty filt
+    result = utils.filter_ranges(base, [])
+    assert isinstance(result, np.ndarray)
+    # Edge case: both empty
+    result = utils.filter_ranges([], [])
+    assert isinstance(result, np.ndarray) 

@@ -261,7 +261,7 @@ def filter_ranges(base : list[tuple[int,int]] | np.ndarray, filt : list[tuple[in
     b = ranges_to_list(filt)
     c = filter_array(a,b)
     filt = get_consecutive_ranges(c)
-    return filt
+    return np.array(filt)
 
 
 def segment_lengths(segments : np.ndarray, inclusive: bool = False) -> np.ndarray:
