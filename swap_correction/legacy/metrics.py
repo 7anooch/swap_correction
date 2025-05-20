@@ -4,10 +4,10 @@ from swap_correction import utils
 
 
 POSDICT = {
-    'head' : ('xhead','yhead'),
-    'tail' : ('xtail','ytail'),
-    'ctr' : ('xctr','yctr'),
-    'mid' : ('xmid','ymid')
+    'head': ('X-Head', 'Y-Head'),
+    'tail': ('X-Tail', 'Y-Tail'),
+    'ctr': ('X-Centroid', 'Y-Centroid'),
+    'mid': ('X-Midpoint', 'Y-Midpoint')
 }
 
 

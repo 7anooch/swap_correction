@@ -23,11 +23,6 @@ PIVRCOLS = [ # columns of interest in raw PiVR file
     'X-Head','Y-Head','X-Tail','Y-Tail','X-Midpoint','Y-Midpoint','X-Centroid','Y-Centroid',
     'Xmin-bbox','Ymin-bbox','Xmax-bbox','Ymax-bbox'
     ]
-NEWCOLS = [ # new column names
-    'xhead','yhead','xtail','ytail','xmid','ymid','xctr','yctr',
-    'xmin','ymin','xmax','ymax'
-    ]
-POSCOLS = NEWCOLS[:8] # position column names
 
 
 # ----- Data Import -----
@@ -68,7 +63,7 @@ def load_raw_data(mainPath : str, fileName : str | None = None) -> pd.DataFrame:
 
     # load position data
     for i in range(len(PIVRCOLS)):
-        data[NEWCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
+        data[PIVRCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
 
     return data
 
@@ -89,31 +84,22 @@ def import_analysed_data(sourceDir : str, fileName : str = ANALYZED_DATA) -> pd.
     return data
 
 
-def export_to_PiVR(sourceDir : pd.DataFrame, data : pd.DataFrame, 
-                   suffix : str = 'level1') -> None:
-    """
-    Export data to PiVR-compatible csv file
-
-    sourceDir: directory containing reference data
-    data: data to export
-    fileName: name of exported file
-    """
-    rawData, dataPath = _retrieve_raw_data(sourceDir)
-
-    # transform filtered position data and copy back into source dataframe 
+def export_to_PiVR(mainPath : str, data : pd.DataFrame, suffix : str = 'level1') -> None:
+    '''
+    Export filtered/corrected data to PiVR format (csv)
+    '''
+    rawData, dataPath = _retrieve_raw_data(mainPath)
+    # Overwrite only the columns in PIVRCOLS, aligning indices
     for i in range(len(PIVRCOLS)):
-        rawData[PIVRCOLS[i]] = data[NEWCOLS[i]].to_numpy()
-
-    rawDataFilename = os.path.basename(dataPath)
-    name = rawDataFilename.split('.csv')[0]
+        if PIVRCOLS[i] in data.columns:
+            rawData[PIVRCOLS[i]] = data[PIVRCOLS[i]].reindex(rawData.index).to_numpy()
+    # Drop any Unnamed columns
+    rawData = rawData.loc[:, ~rawData.columns.str.startswith('Unnamed')]
+    # Save to new file
+    name = os.path.basename(dataPath).split('.csv')[0]
     newFileName = f"{name}_{suffix}.csv"
-
-    if 'Unnamed: 0' in rawData.columns:
-        rawData = rawData.drop(columns=['Unnamed: 0'])
-
-    # export
-    filePath = os.path.join(sourceDir,newFileName)
-    rawData.to_csv(filePath, index=False) # export csv file
+    outPath = os.path.join(mainPath, newFileName)
+    rawData.to_csv(outPath, index=False)
 
 
 # ----- Settings / Supplemetal Data Import -----

@@ -53,8 +53,8 @@ def test_load_raw_data(fake_raw_data, fake_settings):
         df = pivr_loader.load_raw_data('/main')
         assert isinstance(df, pd.DataFrame)
         assert 'stimulus' in df.columns
-        assert 'xhead' in df.columns
-        assert np.allclose(df['xhead'], fake_raw_data['X-Head'])
+        assert 'X-Head' in df.columns
+        assert np.allclose(df['X-Head'], fake_raw_data['X-Head'])
 
 def test__retrieve_raw_data(fake_raw_data):
     with mock.patch('swap_correction.utils.find_file', return_value='data.csv'), \
@@ -74,9 +74,9 @@ def test_export_to_PiVR(tmp_path, fake_raw_data):
     with mock.patch('swap_correction.pivr_loader.get_settings', return_value=(30, 2, np.array([10, 20]))), \
          mock.patch('swap_correction.pivr_loader._retrieve_raw_data', return_value=(fake_raw_data.copy(), str(tmp_path/'data.csv'))):
         data = pd.DataFrame({
-            'xhead': [1, 2], 'yhead': [3, 4], 'xtail': [5, 6], 'ytail': [7, 8],
-            'xmid': [9, 10], 'ymid': [11, 12], 'xctr': [13, 14], 'yctr': [15, 16],
-            'xmin': [17, 18], 'ymin': [19, 20], 'xmax': [21, 22], 'ymax': [23, 24]
+            'X-Head': [1, 2], 'Y-Head': [3, 4], 'X-Tail': [5, 6], 'Y-Tail': [7, 8],
+            'X-Midpoint': [9, 10], 'Y-Midpoint': [11, 12], 'X-Centroid': [13, 14], 'Y-Centroid': [15, 16],
+            'Xmin-bbox': [17, 18], 'Ymin-bbox': [19, 20], 'Xmax-bbox': [21, 22], 'Ymax-bbox': [23, 24]
         })
         pivr_loader.export_to_PiVR(str(tmp_path), data, suffix='test')
         # Check that the file was created

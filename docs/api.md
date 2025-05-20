@@ -115,22 +115,6 @@ Calculate statistics for each segment.
 **Returns:**
 - Array of statistics (mean, std, median) for each segment
 
-### kalman_filter
-
-Module for Kalman filtering of tracking data.
-
-#### Functions
-
-##### `filter_trajectory(data: np.ndarray, params: dict = None) -> np.ndarray`
-Apply Kalman filter to smooth trajectory.
-
-**Parameters:**
-- `data`: Array of position data
-- `params`: Filter parameters (optional)
-
-**Returns:**
-- Filtered trajectory data
-
 ## Data Structures
 
 ### TrackingData

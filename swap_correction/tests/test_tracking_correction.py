@@ -17,20 +17,20 @@ import logging
 def simple_data():
     # Minimal DataFrame with all required columns
     return pd.DataFrame({
-        'xhead': [0, 1, 2], 'yhead': [0, 1, 2],
-        'xtail': [0, 1, 2], 'ytail': [0, 1, 2],
-        'xmid': [0, 1, 2], 'ymid': [0, 1, 2],
-        'xctr': [0, 1, 2], 'yctr': [0, 1, 2]
+        'X-Head': [0, 1, 2], 'Y-Head': [0, 1, 2],
+        'X-Tail': [0, 1, 2], 'Y-Tail': [0, 1, 2],
+        'X-Midpoint': [0, 1, 2], 'Y-Midpoint': [0, 1, 2],
+        'X-Centroid': [0, 1, 2], 'Y-Centroid': [0, 1, 2]
     })
 
 @pytest.fixture
 def float_simple_data():
     # Like simple_data, but all columns are float (to avoid NaN assignment warnings)
     return pd.DataFrame({
-        'xhead': [0.0, 1.0, 2.0], 'yhead': [0.0, 1.0, 2.0],
-        'xtail': [0.0, 1.0, 2.0], 'ytail': [0.0, 1.0, 2.0],
-        'xmid': [0.0, 1.0, 2.0], 'ymid': [0.0, 1.0, 2.0],
-        'xctr': [0.0, 1.0, 2.0], 'yctr': [0.0, 1.0, 2.0]
+        'X-Head': [0.0, 1.0, 2.0], 'Y-Head': [0.0, 1.0, 2.0],
+        'X-Tail': [0.0, 1.0, 2.0], 'Y-Tail': [0.0, 1.0, 2.0],
+        'X-Midpoint': [0.0, 1.0, 2.0], 'Y-Midpoint': [0.0, 1.0, 2.0],
+        'X-Centroid': [0.0, 1.0, 2.0], 'Y-Centroid': [0.0, 1.0, 2.0]
     })
 
 def test_tracking_correction_pipeline(simple_data):
@@ -48,7 +48,7 @@ def test_tracking_correction_pipeline(simple_data):
 def test_remove_edge_frames(float_simple_data):
     # Patch utils.flatten and metrics.POSDICT
     with mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: sum(x, [])), \
-         mock.patch('swap_correction.tracking.correction.correction.metrics.POSDICT', {'head': ['xhead', 'yhead'], 'tail': ['xtail', 'ytail'], 'mid': ['xmid', 'ymid'], 'ctr': ['xctr', 'yctr']}):
+         mock.patch('swap_correction.tracking.correction.correction.metrics.POSDICT', {'head': ['X-Head', 'Y-Head'], 'tail': ['X-Tail', 'Y-Tail'], 'mid': ['X-Midpoint', 'Y-Midpoint'], 'ctr': ['X-Centroid', 'Y-Centroid']}):
         out = tracking_correction.remove_edge_frames(float_simple_data)
         assert isinstance(out, pd.DataFrame)
         assert set(out.columns) == set(float_simple_data.columns)
@@ -73,15 +73,15 @@ def test_remove_overlaps(simple_data):
     # Patch get_overlap_edges, flag_discontinuities, utils.flatten
     with mock.patch('swap_correction.tracking.flagging.flags.get_overlap_edges', return_value=pd.DataFrame({'start': [0], 'end': [1]})), \
          mock.patch('swap_correction.tracking.flagging.flags.flag_discontinuities', return_value=np.array([0])), \
-         mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: ['xhead', 'yhead', 'xtail', 'ytail', 'xmid', 'ymid', 'xctr', 'yctr']):
+         mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint', 'X-Centroid', 'Y-Centroid']):
         out = tracking_correction.remove_overlaps(simple_data)
         assert isinstance(out, pd.DataFrame)
 
 def test_interpolate_gaps(simple_data):
     # Insert NaNs to test interpolation
     data = simple_data.copy()
-    data.loc[0, 'xhead'] = np.nan
-    data.loc[1, 'xhead'] = np.nan
+    data.loc[0, 'X-Head'] = np.nan
+    data.loc[1, 'X-Head'] = np.nan
     out = tracking_correction.interpolate_gaps(data)
     assert isinstance(out, pd.DataFrame)
 
@@ -211,7 +211,7 @@ def test_filter_median(float_simple_data):
 def test_remove_edge_frames_debug(float_simple_data, caplog):
     # Patch utils.flatten and metrics.POSDICT
     with mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: sum(x, [])), \
-         mock.patch('swap_correction.tracking.correction.correction.metrics.POSDICT', {'head': ['xhead', 'yhead'], 'tail': ['xtail', 'ytail'], 'mid': ['xmid', 'ymid'], 'ctr': ['xctr', 'yctr']}):
+         mock.patch('swap_correction.tracking.correction.correction.metrics.POSDICT', {'head': ['X-Head', 'Y-Head'], 'tail': ['X-Tail', 'Y-Tail'], 'mid': ['X-Midpoint', 'Y-Midpoint'], 'ctr': ['X-Centroid', 'Y-Centroid']}):
         tracking_correction.remove_edge_frames(float_simple_data)
         assert "Found" not in caplog.text
 
@@ -219,7 +219,7 @@ def test_remove_overlaps_debug(float_simple_data, caplog):
     # Patch get_overlap_edges, flag_discontinuities, utils.flatten
     with mock.patch('swap_correction.tracking.flagging.flags.get_overlap_edges', return_value=(np.array([0]), np.array([1]))), \
          mock.patch('swap_correction.tracking.flagging.flags.flag_discontinuities', return_value=np.array([0])), \
-         mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: ['xhead', 'yhead', 'xtail', 'ytail', 'xmid', 'ymid', 'xctr', 'yctr']):
+         mock.patch('swap_correction.tracking.correction.correction.utils.flatten', side_effect=lambda x: ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail', 'X-Midpoint', 'Y-Midpoint', 'X-Centroid', 'Y-Centroid']):
         tracking_correction.remove_overlaps(float_simple_data)
         assert "Found" not in caplog.text
 

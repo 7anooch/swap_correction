@@ -64,12 +64,12 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
         b *= fps
 
         # get position data
-        xhead = data.loc[a:b-1,'xhead'].values
-        yhead = data.loc[a:b-1,'yhead'].values
-        xtail = data.loc[a:b-1,'xtail'].values
-        ytail = data.loc[a:b-1,'ytail'].values
-        xctr = data.loc[a:b-1,'xctr'].values
-        yctr = data.loc[a:b-1,'yctr'].values
+        xhead = data.loc[a:b-1,'X-Head'].values
+        yhead = data.loc[a:b-1,'Y-Head'].values
+        xtail = data.loc[a:b-1,'X-Tail'].values
+        ytail = data.loc[a:b-1,'Y-Tail'].values
+        xctr = data.loc[a:b-1,'X-Centroid'].values
+        yctr = data.loc[a:b-1,'Y-Centroid'].values
 
         # get first non-NaN position to indicate start
         valid_mask = ~np.isnan(xctr)
@@ -88,20 +88,20 @@ def plot_trajectory(ax : plt.Axes, data : pd.DataFrame, fps : int = 1,
         ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
     else:
         # get first non-NaN position to indicate start
-        valid_mask = ~np.isnan(data['xctr'])
+        valid_mask = ~np.isnan(data['X-Centroid'])
         if not np.any(valid_mask):
             return
-        xo = data['xctr'].loc[data['xctr'].first_valid_index()]
-        yo = data['yctr'].loc[data['yctr'].first_valid_index()]
+        xo = data['X-Centroid'].loc[data['X-Centroid'].first_valid_index()]
+        yo = data['Y-Centroid'].loc[data['Y-Centroid'].first_valid_index()]
 
         if headTail:
-            ax.plot(data['xhead'],data['yhead'],c=hcol,alpha=0.5,label='head')
-            ax.plot(data['xtail'],data['ytail'],c=tcol,alpha=0.5,label='tail')
+            ax.plot(data['X-Head'],data['Y-Head'],c=hcol,alpha=0.5,label='head')
+            ax.plot(data['X-Tail'],data['Y-Tail'],c=tcol,alpha=0.5,label='tail')
         if ledData is None:
-            ax.plot(data['xctr'],data['yctr'],c=ccol,label='ctrd')
+            ax.plot(data['X-Centroid'],data['Y-Centroid'],c=ccol,label='ctrd')
         else:
             ccol = _get_colors_from_LED(ledData)
-            ax.scatter(data['xctr'],data['yctr'],c=ccol,s=0.1,label='ctrd')
+            ax.scatter(data['X-Centroid'],data['Y-Centroid'],c=ccol,s=0.1,label='ctrd')
         ax.scatter(xo,yo,c=anncol,marker='x',s=10,label='start')
     ax.scatter(*source,c=anncol,marker='o',s=10,label='odor')
     ax.set_title('Trajectory (mm)')
@@ -130,19 +130,19 @@ def plot_stacked_trajectories(ax : plt.Axes, dfs : list[pd.DataFrame],
     if ledData is not None:
         for i, data in enumerate(dfs):
             cols = _get_colors_from_LED(ledData)  # Use the provided LED data directly
-            ax.scatter(data['xctr'],data['yctr'],c=cols,s=0.1)
+            ax.scatter(data['X-Centroid'],data['Y-Centroid'],c=cols,s=0.1)
     # indicate time with color gradient
     elif timeSpectrum:
         nframes = dfs[0].shape[0]
         cols = cmap(np.linspace(0,1,nframes)) # create a spectrum of colors across timepoints
         cols = np.flip(cols,0) # make color-coding more intuitive
         for i, data in enumerate(dfs):
-            ax.scatter(data['xctr'],data['yctr'],c=cols,s=0.1)
+            ax.scatter(data['X-Centroid'],data['Y-Centroid'],c=cols,s=0.1)
     # indicate samples sequentially with color gradient
     else:
         cols = cmap(np.linspace(0,1,len(dfs))) # create a spectrum of colors across samples
         for i, data in enumerate(dfs):
-            ax.plot(data['xctr'],data['yctr'],c=cols[i])
+            ax.plot(data['X-Centroid'],data['Y-Centroid'],c=cols[i])
     
     ax.scatter(*source, c='b',marker='o',s=10)
     ax.set_title('Trajectories (mm)')

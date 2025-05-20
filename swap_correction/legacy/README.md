@@ -5,7 +5,6 @@ This directory contains a snapshot of the original codebase before the refactori
 ## Contents
 
 - `__init__.py` - Package initialization
-- `kalman_filter.py` - Kalman filter implementation for tracking
 - `metrics.py` - Metrics calculations for tracking data
 - `pivr_loader.py` - Data loading and settings management
 - `plotting.py` - Visualization functions

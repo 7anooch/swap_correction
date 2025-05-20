@@ -23,11 +23,6 @@ PIVRCOLS = [ # columns of interest in raw PiVR file
     'X-Head','Y-Head','X-Tail','Y-Tail','X-Midpoint','Y-Midpoint','X-Centroid','Y-Centroid',
     'Xmin-bbox','Ymin-bbox','Xmax-bbox','Ymax-bbox'
     ]
-NEWCOLS = [ # new column names
-    'xhead','yhead','xtail','ytail','xmid','ymid','xctr','yctr',
-    'xmin','ymin','xmax','ymax'
-    ]
-POSCOLS = NEWCOLS[:8] # position column names
 
 
 # ----- Data Import -----
@@ -68,7 +63,7 @@ def load_raw_data(mainPath : str, fileName : str | None = None) -> pd.DataFrame:
 
     # load position data
     for i in range(len(PIVRCOLS)):
-        data[NEWCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
+        data[PIVRCOLS[i]] = rawData[PIVRCOLS[i]].to_numpy()
 
     return data
 
@@ -102,7 +97,7 @@ def export_to_PiVR(sourceDir : pd.DataFrame, data : pd.DataFrame,
 
     # transform filtered position data and copy back into source dataframe 
     for i in range(len(PIVRCOLS)):
-        rawData[PIVRCOLS[i]] = data[NEWCOLS[i]].to_numpy()
+        rawData[PIVRCOLS[i]] = data[PIVRCOLS[i]].to_numpy()
 
     rawDataFilename = os.path.basename(dataPath)
     name = rawDataFilename.split('.csv')[0]

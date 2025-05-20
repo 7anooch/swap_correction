@@ -10,14 +10,14 @@ import warnings
 def sample_dataframe():
     """Create a sample dataframe for testing."""
     data = {
-        'xhead': [0, 1, 2, 3, 4],
-        'yhead': [0, 1, 2, 3, 4],
-        'xtail': [0, 0, 0, 0, 0],
-        'ytail': [0, 0, 0, 0, 0],
-        'xmid': [0, 0.5, 1, 1.5, 2],
-        'ymid': [0, 0.5, 1, 1.5, 2],
-        'xctr': [0, 0.5, 1, 1.5, 2],
-        'yctr': [0, 0.5, 1, 1.5, 2]
+        'X-Head': [0, 1, 2, 3, 4],
+        'Y-Head': [0, 1, 2, 3, 4],
+        'X-Tail': [0, 0, 0, 0, 0],
+        'Y-Tail': [0, 0, 0, 0, 0],
+        'X-Midpoint': [0, 0.5, 1, 1.5, 2],
+        'Y-Midpoint': [0, 0.5, 1, 1.5, 2],
+        'X-Centroid': [0, 0.5, 1, 1.5, 2],
+        'Y-Centroid': [0, 0.5, 1, 1.5, 2]
     }
     return pd.DataFrame(data)
 
@@ -33,14 +33,14 @@ def test_vectors_from_key(sample_dataframe):
     # Test with transpose
     vec = metrics.vectors_from_key(sample_dataframe, 'head')
     assert vec.shape == (2, 5)
-    np.testing.assert_array_equal(vec[0], sample_dataframe['xhead'])
-    np.testing.assert_array_equal(vec[1], sample_dataframe['yhead'])
+    np.testing.assert_array_equal(vec[0], sample_dataframe['X-Head'])
+    np.testing.assert_array_equal(vec[1], sample_dataframe['Y-Head'])
     
     # Test without transpose
     vec = metrics.vectors_from_key(sample_dataframe, 'head', transpose=False)
     assert vec.shape == (5, 2)
-    np.testing.assert_array_equal(vec[:, 0], sample_dataframe['xhead'])
-    np.testing.assert_array_equal(vec[:, 1], sample_dataframe['yhead'])
+    np.testing.assert_array_equal(vec[:, 0], sample_dataframe['X-Head'])
+    np.testing.assert_array_equal(vec[:, 1], sample_dataframe['Y-Head'])
 
 
 def test_get_delta_in_frame(sample_dataframe):
@@ -66,7 +66,11 @@ def test_get_custom_orientation(sample_dataframe):
 
 def test_get_bearing(sample_dataframe):
     """Test calculation of bearing angle."""
-    bearing = metrics.get_bearing(sample_dataframe, source=[0, 0])
+    # Ensure 'X-Centroid' and 'Y-Centroid' are present
+    df = sample_dataframe.copy()
+    df['X-Centroid'] = df['X-Head']  # Use head position as centroid for testing
+    df['Y-Centroid'] = df['Y-Head']
+    bearing = metrics.get_bearing(df, source=[0, 0])
     assert bearing.shape == (5,)
     assert not np.any(np.isnan(bearing))
 
@@ -82,8 +86,8 @@ def test_get_vectors_between(sample_dataframe):
     """Test calculation of vectors between points."""
     vecs = metrics.get_vectors_between(sample_dataframe, 'tail', 'head')
     assert vecs.shape == (5, 2)
-    np.testing.assert_array_equal(vecs[:, 0], sample_dataframe['xhead'] - sample_dataframe['xtail'])
-    np.testing.assert_array_equal(vecs[:, 1], sample_dataframe['yhead'] - sample_dataframe['ytail'])
+    np.testing.assert_array_equal(vecs[:, 0], sample_dataframe['X-Head'] - sample_dataframe['X-Tail'])
+    np.testing.assert_array_equal(vecs[:, 1], sample_dataframe['Y-Head'] - sample_dataframe['Y-Tail'])
 
 
 def test_get_motion_vector(sample_dataframe):
@@ -116,8 +120,8 @@ def test_get_cross_segment_deltas(sample_dataframe, sample_segments):
 
 def test_get_df_bounds(sample_dataframe):
     """Test calculation of dataframe bounds."""
-    xlim = metrics.get_df_bounds([sample_dataframe], ['xhead', 'xtail'])
-    ylim = metrics.get_df_bounds([sample_dataframe], ['yhead', 'ytail'])
+    xlim = metrics.get_df_bounds([sample_dataframe], ['X-Head', 'X-Tail'])
+    ylim = metrics.get_df_bounds([sample_dataframe], ['Y-Head', 'Y-Tail'])
     
     # The function adds a 5% buffer to the bounds
     expected_xmin = -0.2  # 0 - (4-0)*0.05
@@ -215,7 +219,7 @@ def test_get_speed_from_df_empty_missing():
     except Exception:
         pass
     # Missing columns
-    df = pd.DataFrame({'xhead': [1, 2], 'yhead': [1, 2]})
+    df = pd.DataFrame({'X-Head': [1, 2], 'Y-Head': [1, 2]})
     spd = metrics.get_speed_from_df(df, 'head')
     assert spd.shape[0] == 2
 

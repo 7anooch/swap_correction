@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 from swap_correction import utils, metrics
-from swap_correction.kalman_filter import KalmanFilter
 
 # Parameters
 OVERLAP_THRESH = 0 # maximum distance between overlapping points

@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
 from swap_correction import utils
+from typing import Dict, Any, Tuple
 
 
 POSDICT = {
-    'head' : ('xhead','yhead'),
-    'tail' : ('xtail','ytail'),
-    'ctr' : ('xctr','yctr'),
-    'mid' : ('xmid','ymid')
+    'head': ('X-Head', 'Y-Head'),
+    'tail': ('X-Tail', 'Y-Tail'),
+    'ctr': ('X-Centroid', 'Y-Centroid'),
+    'mid': ('X-Midpoint', 'Y-Midpoint')
 }
 
 
@@ -171,7 +172,7 @@ def get_bearing(data : pd.DataFrame, source : list[float] = [0,0],
     Get the angle of the organism relative to the vector between it and the source (or global centre)
     """
     v = get_orientation_vectors(data,head,fromMotion)
-    ref = [[source[0]-data.at[i,'xctr'],source[1]-data.at[i,'yctr']] for i in range(data.shape[0])]
+    ref = [[source[0]-data.at[i,'X-Centroid'],source[1]-data.at[i,'Y-Centroid']] for i in range(data.shape[0])]
     ba = np.array(list([utils.get_angle(ref[i],v[i],halfAngle=halfAngle) for i in range(data.shape[0])]))
     return ba
 
@@ -394,3 +395,130 @@ def get_cross_segment_deltas(data : pd.DataFrame, segments : np.ndarray,
     a, b = segments.T + np.array([-1,1])[:,None] * offset # TODO: check for valid bounds
     delta = np.sqrt((x2[b] - x1[a])**2 + (y2[b] - y1[a])**2)
     return delta
+
+
+class Metrics:
+    """Calculates quality metrics for tracking data."""
+    
+    def __init__(self):
+        """Initialize the metrics module."""
+        # Metric parameters
+        self.max_speed = 100  # pixels per frame
+        self.max_angle_change = np.pi/2  # radians
+    
+    def calculate_quality_metrics(self, data: pd.DataFrame) -> Dict[str, float]:
+        """
+        Calculate quality metrics for the tracking data.
+        
+        Args:
+            data: Tracking data as a DataFrame
+            
+        Returns:
+            Dictionary of quality metrics
+        """
+        metrics = {}
+        
+        # Calculate basic metrics
+        metrics['tracking_continuity'] = self._calculate_continuity(data)
+        metrics['swap_errors'] = self._count_swap_errors(data)
+        metrics['tracking_errors'] = self._count_tracking_errors(data)
+        
+        return metrics
+    
+    def calculate_error_metrics(self, data: pd.DataFrame, ground_truth: pd.DataFrame) -> Dict[str, float]:
+        """
+        Calculate error metrics between data and ground truth.
+        
+        Args:
+            data: Tracking data as a DataFrame
+            ground_truth: Ground truth data as a DataFrame
+            
+        Returns:
+            Dictionary of error metrics
+        """
+        errors = {}
+        
+        # Calculate position error using X-Head and Y-Head
+        position_error = np.sqrt(
+            (data['X-Head'] - ground_truth['X-Head'])**2 + 
+            (data['Y-Head'] - ground_truth['Y-Head'])**2
+        )
+        errors['position_error'] = np.mean(position_error)
+        
+        # Calculate angle error robustly, skipping NaNs in both arrays
+        angle1 = np.unwrap(data['angle'].values)
+        angle2 = np.unwrap(ground_truth['angle'].values)
+        min_len = min(len(angle1), len(angle2))
+        angle1 = angle1[:min_len]
+        angle2 = angle2[:min_len]
+        valid_mask = ~np.isnan(angle1) & ~np.isnan(angle2)
+        if np.any(valid_mask):
+            angle_diff = angle1[valid_mask] - angle2[valid_mask]
+            angle_error = np.abs(angle_diff)
+            errors['angle_error'] = np.mean(angle_error)
+        else:
+            errors['angle_error'] = np.nan
+        
+        # Count swap errors
+        errors['swap_errors'] = self._count_swap_errors(data)
+        
+        return errors
+    
+    def calculate_correlation(self, data: pd.DataFrame, ground_truth: pd.DataFrame) -> float:
+        """
+        Calculate correlation between data and ground truth.
+        
+        Args:
+            data: Tracking data as a DataFrame
+            ground_truth: Ground truth data as a DataFrame
+            
+        Returns:
+            Correlation coefficient
+        """
+        # Calculate position correlation using X-Head and Y-Head
+        x_corr = np.corrcoef(data['X-Head'], ground_truth['X-Head'])[0, 1]
+        y_corr = np.corrcoef(data['Y-Head'], ground_truth['Y-Head'])[0, 1]
+        
+        return (x_corr + y_corr) / 2
+    
+    def _calculate_continuity(self, data: pd.DataFrame) -> float:
+        """Calculate tracking continuity score."""
+        # Count gaps in tracking using X-Head and Y-Head
+        gaps = data[['X-Head', 'Y-Head']].isna().any(axis=1)
+        if not gaps.any():
+            return 1.0
+            
+        # Calculate continuity as fraction of non-gap frames
+        return 1 - (gaps.sum() / len(data))
+    
+    def _count_swap_errors(self, data: pd.DataFrame) -> int:
+        """Count potential head-tail swaps."""
+        # Calculate speed and angle changes using X-Head and Y-Head
+        speeds = np.sqrt(
+            np.diff(data['X-Head'])**2 + 
+            np.diff(data['Y-Head'])**2
+        )
+        angle_changes = np.abs(np.diff(data['angle']))
+        
+        # Count regions with sudden changes
+        swap_count = 0
+        for i in range(1, len(data) - 1):
+            if (speeds[i] > self.max_speed and 
+                angle_changes[i] > self.max_angle_change):
+                swap_count += 1
+        
+        return swap_count
+    
+    def _count_tracking_errors(self, data: pd.DataFrame) -> int:
+        """Count potential tracking errors."""
+        error_count = 0
+        
+        # Check for missing or low confidence points
+        if 'confidence' in data.columns:
+            low_confidence = data['confidence'] < 0.7
+            if low_confidence.any():
+                # Count groups of consecutive low confidence points
+                starts = np.where(np.diff(low_confidence.astype(int)) == 1)[0] + 1
+                error_count += len(starts)
+        
+        return error_count

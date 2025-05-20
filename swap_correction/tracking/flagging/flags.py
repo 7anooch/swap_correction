@@ -135,8 +135,8 @@ def get_all_overlap_edges(data: pd.DataFrame, debug: bool = False) -> tuple:
 
 def get_all_deltas(data: pd.DataFrame) -> np.ndarray:
     """Get all head-tail delta vectors."""
-    xdelta = data['xhead'].to_numpy() - data['xtail'].to_numpy()
-    ydelta = data['yhead'].to_numpy() - data['ytail'].to_numpy()
+    xdelta = data['X-Head'].to_numpy() - data['X-Tail'].to_numpy()
+    ydelta = data['Y-Head'].to_numpy() - data['Y-Tail'].to_numpy()
     return np.column_stack((xdelta, ydelta))
 
 def flag_overlap_minimum_mismatches(data: pd.DataFrame, debug: bool = False) -> np.ndarray:

@@ -11,14 +11,14 @@ from swap_correction import plotting
 def sample_dataframe():
     """Create a sample dataframe for testing."""
     data = {
-        'xhead': [0, 1, 2, 3, 4],
-        'yhead': [0, 1, 2, 3, 4],
-        'xtail': [0, 0, 0, 0, 0],
-        'ytail': [0, 0, 0, 0, 0],
-        'xmid': [0, 0.5, 1, 1.5, 2],
-        'ymid': [0, 0.5, 1, 1.5, 2],
-        'xctr': [0, 0.5, 1, 1.5, 2],
-        'yctr': [0, 0.5, 1, 1.5, 2]
+        'X-Head': [0, 1, 2, 3, 4],
+        'Y-Head': [0, 1, 2, 3, 4],
+        'X-Tail': [0, 0, 0, 0, 0],
+        'Y-Tail': [0, 0, 0, 0, 0],
+        'X-Midpoint': [0, 0.5, 1, 1.5, 2],
+        'Y-Midpoint': [0, 0.5, 1, 1.5, 2],
+        'X-Centroid': [0, 0.5, 1, 1.5, 2],
+        'Y-Centroid': [0, 0.5, 1, 1.5, 2]
     }
     return pd.DataFrame(data)
 
@@ -222,7 +222,7 @@ def test_plot_trajectory_edge_cases(sample_dataframe):
     
     # Test with NaN values
     df_with_nan = sample_dataframe.copy()
-    df_with_nan.loc[2, 'xhead'] = np.nan
+    df_with_nan.loc[2, 'X-Head'] = np.nan
     plotting.plot_trajectory(ax, df_with_nan, fps=30)
     assert len(ax.lines) > 0
     
@@ -233,12 +233,12 @@ def test_plot_trajectory_limits_legend():
     """Test trajectory plotting with custom limits and legend."""
     fig, ax = plt.subplots()
     data = pd.DataFrame({
-        'xhead': [0, 1, 2],
-        'yhead': [0, 1, 2],
-        'xtail': [0, 0, 0],
-        'ytail': [0, 0, 0],
-        'xctr': [0, 0.5, 1],
-        'yctr': [0, 0.5, 1]
+        'X-Head': [0, 1, 2],
+        'Y-Head': [0, 1, 2],
+        'X-Tail': [0, 0, 0],
+        'Y-Tail': [0, 0, 0],
+        'X-Centroid': [0, 0.5, 1],
+        'Y-Centroid': [0, 0.5, 1]
     })
     
     # Test with custom limits

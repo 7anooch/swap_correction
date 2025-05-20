@@ -120,20 +120,7 @@ plotting.plot_trajectories(
 
 ### Kalman Filtering
 
-Apply Kalman filtering to smooth trajectories:
-
-```python
-from swap_correction import kalman_filter
-
-# Filter trajectories
-filtered = kalman_filter.filter_trajectory(
-    corrected,
-    params={
-        'process_noise': 0.1,
-        'measurement_noise': 0.1
-    }
-)
-```
+# (Kalman filter section removed)
 
 ### Custom Metrics
 
