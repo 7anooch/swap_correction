@@ -2,6 +2,7 @@ import tkinter.filedialog as fd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import argparse
 from swap_correction import plotting, utils, metrics
 from swap_correction.tracking import tracking_correction
 from swap_correction import pivr_loader as loader
@@ -9,16 +10,14 @@ import logging
 
 FILE_SUFFIX = 'level1'
 
-FIX_SWAPS = True # correct head-tail swaps using single-frame flags
-VALIDATE = False # attempt to correct missed swaps using segment-based metrics (NOTE: currently not recommended!)
 REMOVE_ERRORS = True # set position values in frames where head / tail overlap to NaN
 INTERPOLATE = True # interpolate over short overlap segments
+VALIDATE = False # attempt to correct missed swaps using segment-based metrics (NOTE: currently not recommended!)
 
 DEBUG = False # print debug messages
 DIAGNOSTIC_PLOTS = True # generate and save diagnostic figures
 SHOW_PLOTS = False # display diagnostic figures after saving (if generated)
 TIMES = None#(200,230) # start and end times to show on plots (None -> show entire trajectory)
-
 
 def compare_filtered_trajectories(mainPath : str, outputPath : str = None,
             fileName : str = 'compare_trajectories.png', times : tuple = None, show : bool = True) -> None:
@@ -63,6 +62,11 @@ def compare_filtered_trajectories(mainPath : str, outputPath : str = None,
     plotting.save_figure(fig,fileName,outPath,show=show)
 
 if __name__ == '__main__':
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Correct head-tail swaps and tracking errors in PiVR data.')
+    parser.add_argument('--dry', action='store_true', help='Dry run - process data but do not export to PiVR')
+    args = parser.parse_args()
+
     # open dialogue to get target directory
     msg = 'Select a PiVR trial folder or a parent folder containing multiple trials.'
     sourceDir = fd.askdirectory(title=msg)
@@ -81,21 +85,23 @@ if __name__ == '__main__':
         if True: # set to false to skip filtering and just plot
             data = loader.load_raw_data(sample)
             fps = loader.get_all_settings(sample)['Framerate']
+            resolution = loader.get_all_settings(sample)['Resolution']
             data = tracking_correction(
-                data, fps,
-                swapCorrection=FIX_SWAPS,
+                data, fps, resolution,
                 validate=VALIDATE,
                 removeErrors=REMOVE_ERRORS,
                 interp=INTERPOLATE,
                 debug=DEBUG
             )
-            loader.export_to_PiVR(sample, data, suffix=FILE_SUFFIX)
+            if not args.dry:
+                loader.export_to_PiVR(sample, data, suffix=FILE_SUFFIX)
+            else:
+                logging.info(f'[DRY RUN] Skipping export to PiVR for {sample}')
 
         # generate diagnostic plots
         if DIAGNOSTIC_PLOTS:
             compare_filtered_trajectories(sample,show=SHOW_PLOTS,times=TIMES)
             # compare_filtered_distributions(sample,show=SHOW_PLOTS)
-            #examine_flags(sample,show=SHOW_PLOTS,times=TIMES,labelFrames=True)
             if SHOW_PLOTS : plt.show()
 
     logging.info('Finished ')

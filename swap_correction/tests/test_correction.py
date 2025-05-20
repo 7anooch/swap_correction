@@ -49,7 +49,7 @@ def test_tracking_correction():
 
 def test_correct_tracking_errors():
     df = make_full_df()
-    result = correction.correct_tracking_errors(df, fps=30)
+    result = correction.correct_tracking_errors(df, flags={'tracking_errors': [(0, 1)]})
     assert isinstance(result, pd.DataFrame)
 
 def test_validate_corrected_data():
@@ -115,7 +115,7 @@ def test_correct_tracking_errors():
     df.loc[5:7, 'X-Midpoint'] = 50
     df.loc[5:7, 'Y-Midpoint'] = 50
     flags = {'tracking_errors': [(5, 7)]}
-    out = correction.correct_tracking_errors(df, flags=flags)
+    out = correction.correct_tracking_errors(df, flags)
     # Should interpolate between 4 and 8
     for col in ['X-Head', 'Y-Head', 'angle', 'X-Midpoint', 'Y-Midpoint']:
         expected = np.interp(np.arange(5, 8), [4, 8], [df.loc[4, col], df.loc[8, col]])
