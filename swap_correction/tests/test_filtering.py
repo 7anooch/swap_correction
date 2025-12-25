@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from swap_correction.tracking.filtering import filters
+from swap_correction.tracking.filters import filter_sgolay, filter_gaussian, filter_meanmed, filter_median, filter_data
 from swap_correction import metrics
 
 def make_full_df(n=10):
@@ -11,6 +11,6 @@ def make_full_df(n=10):
 
 def test_filter_sgolay():
     df = make_full_df()
-    filtered = filters.filter_sgolay(df, window=5, order=2)
+    filtered = filter_sgolay(df, window=5, order=2)
     assert isinstance(filtered, pd.DataFrame)
     assert filtered.shape == df.shape 

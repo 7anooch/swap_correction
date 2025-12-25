@@ -3,9 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import random
-from swap_correction.tracking.correction import correction
-from swap_correction.tracking.flagging import flags
-from swap_correction.tracking.filtering import filters
+from swap_correction.tracking import tracking_correction, flag_all_swaps, filter_data
 from swap_correction.metrics import Metrics
 
 # --- Configuration ---
@@ -53,14 +51,14 @@ def load_data():
 def run_pipeline(raw, fps=30):
     # Use the correct flagging and correction functions
     # 1. Flag swaps and errors
-    swap_frames = flags.flag_all_swaps(raw, fps)
+    swap_frames = flag_all_swaps(raw, fps)
     # For demonstration, treat swaps as segments
     from swap_correction import utils
     swap_segments = utils.get_consecutive_ranges(swap_frames)
     # 2. Correct tracking errors (including swaps)
-    corrected = correction.tracking_correction(raw.copy(), fps=fps, swapCorrection=True)
+    corrected = tracking_correction(raw.copy(), fps=fps, swapCorrection=True)
     # 3. Filter data
-    filtered = filters.filter_data(corrected)
+    filtered = filter_data(corrected)
     # For visualization, return swaps as the only flag type
     flag_dict = {'swaps': swap_segments}
     return filtered, flag_dict

@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import pytest
-from swap_correction.tracking.correction import correction
+from swap_correction.tracking.correction import tracking_correction, remove_edge_frames, interpolate_gaps, correct_global_swap, correct_tracking_errors, validate_corrected_data, remove_overlaps, correct_swapped_segments, get_swapped_segments, correct_no_flags, correct_swaps, correct_both_flags, correct_empty_df
 from swap_correction import metrics
 
-# NOTE: The old SwapCorrection class has been replaced by procedural functions in swap_correction.tracking.correction.correction.
-# Update test function calls to use the correct procedural API. Remove any references to SwapCorrection.
+# NOTE: The old SwapCorrection class has been replaced by procedural functions in swap_correction.tracking.correction.
+# Update test function calls to use the correct procedural API.
 
 def make_full_df(n=3, nan_idx=1):
     cols = [col for pair in metrics.POSDICT.values() for col in pair]
@@ -24,12 +24,12 @@ def test_remove_edge_frames():
     df = make_full_df()
     # Set edge values for head and tail
     df.loc[0, ['X-Head', 'Y-Head', 'X-Tail', 'Y-Tail']] = [0, 0, 0, 0]
-    result = correction.remove_edge_frames(df.copy())
+    result = remove_edge_frames(df.copy(), resolution='100x100')
     assert result.isnull().any().any()
 
 def test_interpolate_gaps():
     df = make_full_df()
-    result = correction.interpolate_gaps(df.copy())
+    result = interpolate_gaps(df.copy())
     assert not result.isnull().any().any()
 
 def test_correct_global_swap():
@@ -39,37 +39,37 @@ def test_correct_global_swap():
     df['X-Tail'] = 1
     df['Y-Head'] = 0
     df['Y-Tail'] = 1
-    result = correction.correct_global_swap(df.copy())
+    result = correct_global_swap(df.copy())
     assert isinstance(result, pd.DataFrame)
 
 def test_tracking_correction():
     df = make_full_df()
-    result = correction.tracking_correction(df, fps=30)
+    result = tracking_correction(df, fps=30, resolution='100x100')
     assert isinstance(result, pd.DataFrame)
 
 def test_correct_tracking_errors():
     df = make_full_df()
-    result = correction.correct_tracking_errors(df, flags={'tracking_errors': [(0, 1)]})
+    result = correct_tracking_errors(df, fps=30)
     assert isinstance(result, pd.DataFrame)
 
 def test_validate_corrected_data():
     df = make_full_df()
-    result = correction.validate_corrected_data(df, fps=30)
+    result = validate_corrected_data(df, fps=30)
     assert isinstance(result, pd.DataFrame)
 
 def test_remove_overlaps():
     df = make_full_df()
-    result = correction.remove_overlaps(df)
+    result = remove_overlaps(df)
     assert isinstance(result, pd.DataFrame)
 
 def test_correct_swapped_segments():
     df = make_full_df()
-    result = correction.correct_swapped_segments(df, start=0, end=1)
+    result = correct_swapped_segments(df, start=0, end=1)
     assert isinstance(result, pd.DataFrame)
 
 def test_get_swapped_segments():
     df = make_full_df()
-    segments = correction.get_swapped_segments(df, fps=30)
+    segments = get_swapped_segments(df, fps=30)
     assert isinstance(segments, list)
 
 def make_simple_df(n=10):
@@ -88,14 +88,14 @@ def make_simple_df(n=10):
 
 def test_correct_no_flags():
     df = make_simple_df()
-    out = correction.correct_no_flags(df, {})
+    out = correct_no_flags(df, {})
     pd.testing.assert_frame_equal(df, out)
 
 def test_correct_swaps():
     df = make_simple_df()
     # Swap rows 2-4
     flags = {'swaps': [(2, 4)]}
-    out = correction.correct_swaps(df, flags)
+    out = correct_swaps(df, flags)
     # Head and tail should be swapped in rows 2-4
     assert np.allclose(out.loc[2:4, 'X-Head'], df.loc[2:4, 'X-Tail'])
     assert np.allclose(out.loc[2:4, 'Y-Head'], df.loc[2:4, 'Y-Tail'])
@@ -115,7 +115,7 @@ def test_correct_tracking_errors():
     df.loc[5:7, 'X-Midpoint'] = 50
     df.loc[5:7, 'Y-Midpoint'] = 50
     flags = {'tracking_errors': [(5, 7)]}
-    out = correction.correct_tracking_errors(df, flags)
+    out = correct_tracking_errors(df, fps=30)
     # Should interpolate between 4 and 8
     for col in ['X-Head', 'Y-Head', 'angle', 'X-Midpoint', 'Y-Midpoint']:
         expected = np.interp(np.arange(5, 8), [4, 8], [df.loc[4, col], df.loc[8, col]])
@@ -125,7 +125,7 @@ def test_correct_both_flags():
     df = make_simple_df()
     # Add a swap and a tracking error
     flags = {'swaps': [(1, 2)], 'tracking_errors': [(5, 6)]}
-    out = correction.correct_both_flags(df, flags)
+    out = correct_both_flags(df, flags)
     # Head and tail swapped in 1-2
     assert np.allclose(out.loc[1:2, 'X-Head'], df.loc[1:2, 'X-Tail'])
     assert np.allclose(out.loc[1:2, 'Y-Head'], df.loc[1:2, 'Y-Tail'])
@@ -141,5 +141,5 @@ def test_correct_empty_df():
         'X-Head': [], 'Y-Head': [], 'X-Tail': [], 'Y-Tail': [],
         'X-Midpoint': [], 'Y-Midpoint': [], 'X-Centroid': [], 'Y-Centroid': [], 'angle': []
     })
-    out = correction.correct_empty_df(df, {'swaps': [(0, 0)], 'tracking_errors': [(0, 0)]})
+    out = correct_empty_df(df, {'swaps': [(0, 0)], 'tracking_errors': [(0, 0)]})
     assert out.empty 

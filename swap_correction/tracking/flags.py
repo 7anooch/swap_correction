@@ -13,17 +13,38 @@ def flag_all_swaps(data: pd.DataFrame, fps: float, debug: bool = False) -> np.nd
     olap = flag_overlaps(data, debug=debug)
     sr = flag_sign_reversals(data, debug=debug)
     dm = flag_delta_mismatches(data, debug=debug)
+    mdm = flag_min_delta_mismatches(data, debug=debug)
     cosr = flag_overlap_sign_reversals(data, debug=debug)
     comm = flag_overlap_minimum_mismatches(data, debug=debug)
     
     # Filter out overlaps
     filt = utils.merge(olap, olap+1)
-    dm = utils.filter_array(dm, filt)
+    # dm = utils.filter_array(dm, filt)
+    mdm = utils.filter_array(mdm, filt)
     sr = utils.filter_array(sr, filt)
     
     # Combine all flags
-    all_flags = np.unique(np.concatenate([olap, sr, dm, cosr, comm]))
+    all_flags = np.sort(np.unique(np.concatenate([sr, mdm, cosr, comm])))
     return all_flags
+
+def flag_min_delta_mismatches(data : pd.DataFrame, debug : bool = False) -> np.ndarray:
+    """
+    Flag frames where minimum distance between two frames is from head to tail or vice-versa
+    TODO: add tolerance?
+
+    data: dataframe containing raw position data
+    debug: print debug messages
+    """
+    # get deltas between frames
+    delta = get_all_deltas(data) # tt, hh, th, ht
+
+    # find minimum deltas and check if index matches th or ht
+    # NOTE: argmin <= 1 means tt or hh is minimum distance
+    minidx = np.argmin(delta,axis=0) # index of minimum delta for each frame pair
+    flag = np.where(minidx > 1)[0] + 1 # add one to revert index chage from diff()
+
+    if debug : print('Minimum-Delta Mismatches: {}'.format(flag))
+    return flag
 
 def flag_discontinuities(data: pd.DataFrame, point: str, fps: float, debug: bool = False) -> np.ndarray:
     """Flag frames where there are discontinuities in position data."""

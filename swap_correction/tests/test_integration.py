@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 from swap_correction.metrics import Metrics
-from swap_correction.tracking.flagging import flags
-from swap_correction.tracking.correction import correction
-from swap_correction.tracking.filtering import filters
+from swap_correction.tracking.flags import flag_all_swaps
+from swap_correction.tracking.correction import tracking_correction
+from swap_correction.tracking.filters import filter_data
 
 # Robustly resolve the project root and test data directory
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -88,8 +88,8 @@ def test_pipeline_initialization():
 def test_data_integrity(raw_data, ground_truth_data):
     """Test that the pipeline maintains data integrity."""
     fps = 30
-    corrected_data = correction.tracking_correction(raw_data.copy(), fps=fps, swapCorrection=True)
-    filtered_data = filters.filter_data(corrected_data)
+    corrected_data = tracking_correction(raw_data.copy(), fps=fps, resolution='100x100')
+    filtered_data = filter_data(corrected_data)
 
     # Debug prints
     print("raw_data shape:", raw_data.shape)
@@ -119,10 +119,10 @@ def test_pipeline_flags_or_correction_on_real_data(raw_data):
     """Test that the flagging/correction pipeline actually flags or corrects something on real data."""
     from swap_correction import utils
     fps = 30
-    swap_frames = flags.flag_all_swaps(raw_data, fps)
+    swap_frames = flag_all_swaps(raw_data, fps)
     swap_segments = utils.get_consecutive_ranges(swap_frames)
-    corrected = correction.tracking_correction(raw_data.copy(), fps=fps, swapCorrection=True)
-    filtered = filters.filter_data(corrected)
+    corrected = tracking_correction(raw_data.copy(), fps=fps, resolution='100x100')
+    filtered = filter_data(corrected)
     # Print flags for debugging
     print('Swap segments:', swap_segments)
     # Check if any flags are non-empty

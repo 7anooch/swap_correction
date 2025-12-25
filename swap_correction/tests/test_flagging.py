@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from swap_correction.tracking.flagging import flags
+from swap_correction.tracking.flags import get_all_deltas, flag_overlaps, get_overlap_edges, flag_all_swaps, flag_discontinuities, flag_delta_mismatches, flag_sign_reversals, flag_overlap_sign_reversals, get_all_overlap_edges, flag_overlap_minimum_mismatches
 
 def test_get_all_deltas():
     df = pd.DataFrame({
@@ -10,7 +10,7 @@ def test_get_all_deltas():
         'X-Midpoint': [0.5,1.5], 'Y-Midpoint': [0.5,1.5],
         'X-Centroid': [0.5,1.5], 'Y-Centroid': [0.5,1.5]
     })
-    deltas = flags.get_all_deltas(df)
+    deltas = get_all_deltas(df)
     assert np.allclose(deltas, np.array([[1,1],[1,1]]))
 
 def test_flag_overlaps():
@@ -20,12 +20,12 @@ def test_flag_overlaps():
         'X-Midpoint': [0,1], 'Y-Midpoint': [0,1],
         'X-Centroid': [0,1], 'Y-Centroid': [0,1]
     })
-    overlaps = flags.flag_overlaps(df)
+    overlaps = flag_overlaps(df)
     assert isinstance(overlaps, np.ndarray)
 
 def test_get_overlap_edges():
     overlaps = np.array([1,2,3,7,8,10])
-    starts, ends = flags.get_overlap_edges(overlaps)
+    starts, ends = get_overlap_edges(overlaps)
     assert np.all(starts == np.array([1,7,10]))
     assert np.all(ends == np.array([3,8,10]))
 
@@ -36,7 +36,7 @@ def test_flag_all_swaps():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    all_flags = flags.flag_all_swaps(df, fps=30)
+    all_flags = flag_all_swaps(df, fps=30)
     assert isinstance(all_flags, np.ndarray)
 
 def test_flag_discontinuities():
@@ -46,7 +46,7 @@ def test_flag_discontinuities():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    discontinuities = flags.flag_discontinuities(df, point='head', fps=30)
+    discontinuities = flag_discontinuities(df, point='head', fps=30)
     assert isinstance(discontinuities, np.ndarray)
 
 def test_flag_delta_mismatches():
@@ -56,7 +56,7 @@ def test_flag_delta_mismatches():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    mismatches = flags.flag_delta_mismatches(df)
+    mismatches = flag_delta_mismatches(df)
     assert isinstance(mismatches, np.ndarray)
 
 def test_flag_sign_reversals():
@@ -66,7 +66,7 @@ def test_flag_sign_reversals():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    reversals = flags.flag_sign_reversals(df)
+    reversals = flag_sign_reversals(df)
     assert isinstance(reversals, np.ndarray)
 
 def test_flag_overlap_sign_reversals():
@@ -76,7 +76,7 @@ def test_flag_overlap_sign_reversals():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    overlap_reversals = flags.flag_overlap_sign_reversals(df)
+    overlap_reversals = flag_overlap_sign_reversals(df)
     assert isinstance(overlap_reversals, np.ndarray)
 
 def test_get_all_overlap_edges():
@@ -86,7 +86,7 @@ def test_get_all_overlap_edges():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    starts, ends = flags.get_all_overlap_edges(df)
+    starts, ends = get_all_overlap_edges(df)
     assert isinstance(starts, np.ndarray)
     assert isinstance(ends, np.ndarray)
 
@@ -97,5 +97,5 @@ def test_flag_overlap_minimum_mismatches():
         'X-Midpoint': [0,1,2], 'Y-Midpoint': [0,1,2],
         'X-Centroid': [0,1,2], 'Y-Centroid': [0,1,2]
     })
-    mismatches = flags.flag_overlap_minimum_mismatches(df)
+    mismatches = flag_overlap_minimum_mismatches(df)
     assert isinstance(mismatches, np.ndarray) 
