@@ -1,0 +1,253 @@
+# Configuration file for swap_correction package
+# 
+# NOTE: This file is currently for documentation purposes only.
+# The code does not yet read from this file - parameters are still
+# hardcoded in the source files. This will be wired in later.
+#
+# This file documents all configuration flags and magic numbers used
+# throughout the codebase to improve maintainability and make it easier
+# to understand what parameters control the correction algorithms.
+
+# ============================================================================
+# Main Processing Flags (swap_correct.py)
+# ============================================================================
+# These flags control the main processing pipeline
+
+processing:
+  # Name of the output file for corrected data
+  file_name: "data_filtered.csv"  # Currently: loader.FILTERED_DATA
+  
+  # Core correction flags
+  fix_swaps: true
+    # Correct head-tail swaps using single-frame flags
+    # Location: swap_correct.py line 12
+  
+  validate: false
+    # Attempt to correct missed swaps using segment-based metrics
+    # NOTE: Currently not recommended for use
+    # Location: swap_correct.py line 13
+  
+  remove_errors: true
+    # Set position values in frames where head/tail overlap to NaN
+    # Location: swap_correct.py line 14
+  
+  interpolate: true
+    # Interpolate over short overlap segments
+    # Location: swap_correct.py line 15
+  
+  filter_data: false
+    # Filter data before exporting (not recommended)
+    # Location: swap_correct.py line 16
+  
+  # Diagnostic and output flags
+  debug: false
+    # Print debug messages
+    # Location: swap_correct.py line 18
+  
+  diagnostic_plots: true
+    # Generate and save diagnostic figures
+    # Location: swap_correct.py line 19
+  
+  show_plots: true
+    # Display diagnostic figures after saving (if generated)
+    # Location: swap_correct.py line 20
+  
+  times: null
+    # Start and end times to show on plots (null -> show entire trajectory)
+    # Example: [200, 230] for times 200-230 seconds
+    # Location: swap_correct.py line 21
+
+# ============================================================================
+# Tracking Correction Parameters (tracking_correction.py)
+# ============================================================================
+
+tracking_correction:
+  # Data rounding precision
+  rounding_precision: 1
+    # Number of decimal places to round position data
+    # Location: tracking_correction.py line 34
+  
+  # Overlap detection
+  overlap_threshold: 0
+    # Maximum distance between overlapping points (mm)
+    # 0 means perfect overlap only
+    # Location: tracking_correction.py line 8
+  
+  # Discontinuity detection
+  discontinuity_threshold: 24.0
+    # Minimum speed (mm/s) required to flag a discontinuity
+    # Used to detect sudden jumps in position
+    # Location: tracking_correction.py line 220 (default parameter)
+  
+  # Overlap removal
+  speed_threshold: 20.0
+    # Speed threshold (mm/s) for detecting head/tail discontinuities
+    # Used in remove_overlaps() to determine which point is incorrectly placed
+    # 0 -> remove all overlap data
+    # Location: tracking_correction.py line 101 (default parameter)
+  
+  # Interpolation
+  interpolation:
+    method: "cubicspline"
+      # Interpolation method (see pandas.DataFrame.interpolate)
+      # Location: tracking_correction.py line 144
+    
+    max_segment: 15
+      # Maximum number of consecutive frames to interpolate over
+      # Larger gaps will be ignored
+      # Location: tracking_correction.py line 144
+  
+  # Sign reversal detection
+  sign_reversal_threshold: 1.5707963267948966
+    # Minimum internal angle (radians) required to flag sign reversal
+    # Default: π/2 (prevents excessive flagging when animal is straight)
+    # Location: tracking_correction.py line 278
+  
+  # Overlap sign reversal detection
+  overlap_sign_reversal:
+    tolerance: 0
+      # Maximum allowed distance between overlapping points
+      # Location: tracking_correction.py line 384
+    
+    threshold: 0.7853981633974483
+      # Minimum internal angle (radians) required to flag
+      # Default: π/4
+      # Location: tracking_correction.py line 385
+  
+  # Delta mismatch detection
+  delta_mismatch_tolerance: 0.0
+    # Minimum percent difference between distances required to flag
+    # Location: tracking_correction.py line 238
+  
+  # Segment-based validation
+  segment_validation:
+    mode: "alignment"
+      # Validation mode: 'distance', 'speed', or 'alignment'
+      # Location: tracking_correction.py line 511
+    
+    swap_following: true
+      # Swap all ambiguous segments following a non-ambiguous swapped segment
+      # Location: tracking_correction.py line 512
+    
+    merge_ambiguous: false
+      # Mark ambiguous segments as swapped if sandwiched by swapped segments
+      # Location: tracking_correction.py line 512
+    
+    ignore_edges: false
+      # Do not handle ambiguous edges
+      # Location: tracking_correction.py line 512
+    
+    min_overlap: 1
+      # Minimum duration of overlaps to examine (in frames)
+      # Location: tracking_correction.py line 513
+    
+    min_time: 1.0
+      # Minimum number of seconds between overlaps required to calculate metrics
+      # Location: tracking_correction.py line 513
+    
+    threshold: [0.95, 1.05]
+      # Minimum metric value to label a clear non-swap and maximum to label a clear swap
+      # Location: tracking_correction.py line 514
+    
+    # Alternative threshold for _flag_segment_metrics
+    segment_metric_threshold: [0.9, 1.1]
+      # Lower and upper bound of metric for indicating a clear non-swap or clear swap
+      # Location: tracking_correction.py line 656
+
+# ============================================================================
+# Filtering Parameters (tracking_correction.py)
+# ============================================================================
+
+filtering:
+  # Default filter (currently used)
+  default:
+    type: "gaussian"
+    sigma: 3.0
+      # Standard deviation for Gaussian filter
+      # Location: tracking_correction.py line 801
+  
+  # Alternative filters (commented out in code)
+  savitzky_golay:
+    window: 45
+      # Window size for Savitzky-Golay filter
+      # Location: tracking_correction.py line 806
+    
+    order: 4
+      # Polynomial order for Savitzky-Golay filter
+      # Location: tracking_correction.py line 806
+  
+  median:
+    window: 5
+      # Window size for median filter
+      # Location: tracking_correction.py line 839
+  
+  mean_median:
+    median_window: 15
+      # Window size for rolling median
+      # Location: tracking_correction.py line 826
+    
+    mean_window: 15
+      # Window size for rolling mean (defaults to median_window if not specified)
+      # Location: tracking_correction.py line 826
+
+# ============================================================================
+# Plotting Parameters (swap_correct.py, plotting.py)
+# ============================================================================
+
+plotting:
+  trajectory_comparison:
+    figure_size: [8, 4]
+      # Figure size in inches (width, height)
+      # Location: swap_correct.py line 48
+    
+    output_filename: "compare_trajectories.png"
+      # Default filename for trajectory comparison plots
+      # Location: swap_correct.py line 25
+
+# ============================================================================
+# File Paths (pivr_loader.py)
+# ============================================================================
+
+file_paths:
+  analyzed_data: "analysis.csv"
+    # Default name of analyzed data file
+    # Location: pivr_loader.py line 10
+  
+  filtered_data: "data_filtered.csv"
+    # Default name of filtered PiVR file
+    # Location: pivr_loader.py line 11
+  
+  manual_data: "filtered_data.csv"
+    # Location: pivr_loader.py line 12
+  
+  distance_to_source: "distance_to_source.csv"
+    # File containing PiVR distance to source data
+    # Location: pivr_loader.py line 13
+  
+  experiment_settings: "experiment_settings.json"
+    # File containing PiVR experiment settings
+    # Location: pivr_loader.py line 14
+  
+  experiment_settings_updated: "experiment_settings_updated.json"
+    # File containing updated PiVR experiment settings
+    # Location: pivr_loader.py line 15
+  
+  swap_data: "swaps.json"
+    # Location: pivr_loader.py line 17
+
+# ============================================================================
+# Notes
+# ============================================================================
+#
+# Additional magic numbers found in the codebase:
+#
+# - metrics.py line 85: buffer = 0.05 (5% padding for bounds calculations)
+# - Various angle calculations use π/4 and π/2 as thresholds
+# - Filter parameters are hardcoded in function defaults
+#
+# Future improvements:
+# - Wire in YAML file reading to replace hardcoded values
+# - Add command-line argument support
+# - Add validation for parameter ranges
+# - Document units for all parameters (mm, mm/s, radians, frames, etc.)
+

@@ -1,8 +1,20 @@
+"""
+Core tracking correction algorithms for head-tail swap detection and correction.
+
+This module provides:
+- Main tracking correction pipeline
+- Swap detection algorithms (minimum delta, sign reversals, overlaps)
+- Error removal and interpolation
+- Data filtering (Gaussian, Savitzky-Golay, median)
+- Segment-based validation
+- Global swap correction
+"""
+
 import numpy as np
 import pandas as pd
 import scipy as sp
 from swap_correction import utils, metrics
-from kalman_filter import KalmanFilter
+from swap_correction.kalman_filter import KalmanFilter
 
 # Parameters
 OVERLAP_THRESH = 0 # maximum distance between overlapping points

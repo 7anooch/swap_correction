@@ -1,3 +1,14 @@
+"""
+Utility functions for the swap_correction package.
+
+This module provides helper functions for:
+- File system operations (directory listing, file finding, CSV/JSON I/O)
+- Array manipulation (flattening, merging, filtering)
+- Interval and range operations (consecutive ranges, segment handling)
+- Geometric calculations (angles, vectors, distances)
+- Data analysis utilities (derivatives, rolling statistics)
+"""
+
 import numpy as np
 import pandas as pd
 import os

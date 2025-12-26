@@ -1,3 +1,15 @@
+"""
+Metrics and calculations for animal tracking data.
+
+This module provides functions for computing various metrics from tracking data:
+- Position vectors and distances
+- Speed and velocity calculations
+- Angle calculations (body orientation, head angles, bearings)
+- Tortuosity measurements
+- Delta calculations (frame-to-frame changes)
+- Stop/run detection
+"""
+
 import numpy as np
 import pandas as pd
 from swap_correction import utils

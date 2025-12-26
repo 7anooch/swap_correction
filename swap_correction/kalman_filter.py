@@ -1,3 +1,11 @@
+"""
+Kalman filter implementation for trajectory smoothing.
+
+This module provides a Kalman filter class designed for trajectory data
+under the assumption of a Newtonian model with N derivatives.
+Note: Currently imported but not actively used in the main correction pipeline.
+"""
+
 import numpy as np
 import math
 

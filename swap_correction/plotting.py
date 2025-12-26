@@ -1,3 +1,14 @@
+"""
+Plotting and visualization functions for tracking data.
+
+This module provides functions for:
+- Trajectory visualization (single and multi-sample)
+- Time series plotting
+- Statistical visualizations (histograms, kernel density estimates, GMM)
+- Frequency domain analysis (FFT, power spectrum)
+- Figure saving and display utilities
+"""
+
 import os
 import pandas as pd
 import numpy as np

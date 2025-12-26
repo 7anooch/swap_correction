@@ -1,3 +1,14 @@
+"""
+PiVR data loading and export utilities.
+
+This module handles:
+- Loading raw PiVR CSV data files
+- Converting between PiVR format and internal analysis format
+- Coordinate transformations (pixel to mm, centering on source)
+- Exporting corrected data back to PiVR format
+- Loading experiment settings and metadata
+"""
+
 import numpy as np
 import pandas as pd
 import os
@@ -42,7 +53,8 @@ def get_sample_directories(sourceDir : str) -> list[str]:
         try:
             fname = utils.find_file(folder,'data.csv')
             valid.append(folder)
-        except:
+        except (FileNotFoundError, IndexError, OSError) as e:
+            # Skip folders that don't contain valid PiVR data files
             pass
     return valid
 
@@ -134,7 +146,8 @@ def get_all_settings(mainPath : str, fileName : str = PIVR_SETTINGS) -> dict:
         with open(settingsPath) as json_file:
             settings = json.load(json_file)
         return settings
-    except:
+    except (FileNotFoundError, json.JSONDecodeError, IOError) as e:
+        # Settings file not found or invalid - return None to indicate missing settings
         return None
 
 
