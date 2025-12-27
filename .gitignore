@@ -10,6 +10,7 @@ swap_correction/tests/test_data/
 
 #figures
 *.png
+error_analysis_output/
 
 # Distribution / packaging
 .Python
