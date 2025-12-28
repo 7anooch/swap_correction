@@ -288,15 +288,23 @@ def plot_metric_comparison(raw_data: Optional[pd.DataFrame],
     h2_speed = metrics.get_speed_from_df(level2_data.iloc[:min_len], 'head', fps=fps)
     t2_speed = metrics.get_speed_from_df(level2_data.iloc[:min_len], 'tail', fps=fps)
     
-    ratio1 = h1_speed / (t1_speed + 1e-6)
-    ratio2 = h2_speed / (t2_speed + 1e-6)
+    # Use larger epsilon (0.1 mm/s) and cap ratios to avoid extreme values
+    min_tail_speed = 0.1  # Minimum tail speed threshold (mm/s)
+    max_ratio = 100.0  # Maximum ratio cap
+    
+    t1_safe = np.maximum(t1_speed, min_tail_speed)
+    t2_safe = np.maximum(t2_speed, min_tail_speed)
+    
+    ratio1 = np.clip(h1_speed / t1_safe, -max_ratio, max_ratio)
+    ratio2 = np.clip(h2_speed / t2_safe, -max_ratio, max_ratio)
     
     axes[0].plot(time, ratio1, label='Level 1', alpha=0.7)
     axes[0].plot(time, ratio2, label='Level 2 (GT)', alpha=0.7)
     if raw_data is not None and len(raw_data) >= min_len:
         h0_speed = metrics.get_speed_from_df(raw_data.iloc[:min_len], 'head', fps=fps)
         t0_speed = metrics.get_speed_from_df(raw_data.iloc[:min_len], 'tail', fps=fps)
-        ratio0 = h0_speed / (t0_speed + 1e-6)
+        t0_safe = np.maximum(t0_speed, min_tail_speed)
+        ratio0 = np.clip(h0_speed / t0_safe, -max_ratio, max_ratio)
         axes[0].plot(time, ratio0, label='Raw', alpha=0.5, linestyle='--')
     axes[0].set_ylabel('Head/Tail Speed Ratio')
     axes[0].set_title(f'Metric Comparison: {trial_name}')

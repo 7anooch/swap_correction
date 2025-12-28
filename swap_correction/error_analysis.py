@@ -395,8 +395,22 @@ def calculate_motion_errors(level1_data: pd.DataFrame, level2_data: pd.DataFrame
     errors['tail_speed_error'] = t2_speed - t1_speed
     
     # Speed ratio
-    h1_ratio = h1_speed / (t1_speed + 1e-6)  # Avoid division by zero
-    h2_ratio = h2_speed / (t2_speed + 1e-6)
+    # Use larger epsilon (0.1 mm/s) to avoid extreme values from near-zero tail speeds
+    # Cap ratios at reasonable maximum (100) to prevent extreme outliers
+    min_tail_speed = 0.1  # Minimum tail speed threshold (mm/s)
+    
+    # Calculate ratios with proper handling of near-zero speeds
+    t1_safe = np.maximum(t1_speed, min_tail_speed)
+    t2_safe = np.maximum(t2_speed, min_tail_speed)
+    
+    h1_ratio = h1_speed / t1_safe
+    h2_ratio = h2_speed / t2_safe
+    
+    # Cap extreme ratios at reasonable maximum
+    max_ratio = 100.0
+    h1_ratio = np.clip(h1_ratio, -max_ratio, max_ratio)
+    h2_ratio = np.clip(h2_ratio, -max_ratio, max_ratio)
+    
     errors['speed_ratio_error'] = h2_ratio - h1_ratio
     
     return errors
