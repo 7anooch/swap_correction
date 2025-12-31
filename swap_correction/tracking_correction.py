@@ -24,7 +24,8 @@ OVERLAP_THRESH = 0 # maximum distance between overlapping points
 
 def tracking_correction(data : pd.DataFrame, fps : int, swapCorrection : bool = True,
             removeErrors : bool = True, interp : bool = False, validate : bool = True,
-            filterData : bool = False, debug : bool = False) -> pd.DataFrame:
+            filterData : bool = False, debug : bool = False,
+            comprehensive_params : dict = None) -> pd.DataFrame:
     """
     Apply tracking corrections and filtering to raw data
 
@@ -35,10 +36,12 @@ def tracking_correction(data : pd.DataFrame, fps : int, swapCorrection : bool = 
     validate (bool): use assumption of forward movement to catch remaining swaps
     filterData (bool): apply a Savitzky-Golay filter to the position data
     debug (bool): print debug messages
+    comprehensive_params (dict): parameters for comprehensive metrics approach (optional)
     """
     # correct tracking errors
     data = remove_edge_frames(data,debug=debug)
-    if swapCorrection : data = correct_tracking_errors(data,debug=debug)
+    if swapCorrection : data = correct_tracking_errors(data, fps=fps, debug=debug,
+                                                       comprehensive_params=comprehensive_params)
     if validate : data = validate_corrected_data(data,fps,debug=debug)
     if removeErrors : data = remove_overlaps(data,fps,debug=debug)
     if interp : data = interpolate_gaps(data)
@@ -135,12 +138,40 @@ def detect_swaps_by_cross_sign_consistency(rawData : pd.DataFrame, fps : int = 3
         print(f'Overall cross-sign consistency: {overall_consistency:.3f}')
         print(f'  Positive: {positive_ratio:.3f}, Negative: {negative_ratio:.3f}')
     
-    # If overall consistency is very low, this might be a global swap
-    # But we'll let correct_global_swap handle that, so we skip it here
+    n_frames = len(rawData)
+    
+    # If overall consistency is very low, check if swapping would improve it
+    # This is more reliable than just checking consistency alone
+    # (Some trajectories naturally have low consistency, not due to swaps)
     if overall_consistency < global_threshold:
-        if debug:
-            print(f'Overall consistency < {global_threshold}, likely global swap (handled separately)')
-        return np.empty((0, 2), dtype=int)
+        # Test if swapping would improve consistency
+        # Create a test swapped version
+        test_swapped = rawData.copy()
+        test_swapped[['xhead','yhead','xtail','ytail']] = test_swapped[['xtail','ytail','xhead','yhead']]
+        test_filtered = filter_data(test_swapped)
+        test_signs = metrics.get_ht_cross_sign(test_filtered)
+        test_valid = test_signs[~np.isnan(test_signs)]
+        
+        if len(test_valid) > 0:
+            test_pos = np.sum(test_valid > 0) / len(test_valid)
+            test_neg = np.sum(test_valid < 0) / len(test_valid)
+            test_consistency = max(test_pos, test_neg)
+            
+            if debug:
+                print(f'Original consistency: {overall_consistency:.3f}')
+                print(f'Swapped consistency: {test_consistency:.3f}')
+            
+            # Only swap if it significantly improves consistency (>0.1 improvement)
+            if test_consistency > overall_consistency + 0.1:
+                if debug:
+                    print(f'Swapping improves consistency by {test_consistency - overall_consistency:.3f} - returning entire trajectory')
+                return np.array([[0, n_frames - 1]])
+            else:
+                if debug:
+                    print(f'Swapping does not improve consistency - not swapping')
+        else:
+            if debug:
+                print(f'Cannot test swapped consistency - not enough valid data')
     
     # Use sliding window to find regions with low consistency
     n_frames = len(rawData)
@@ -162,11 +193,13 @@ def detect_swaps_by_cross_sign_consistency(rawData : pd.DataFrame, fps : int = 3
         neg_ratio = np.sum(window_signs < 0) / len(window_signs)
         window_consistency = max(pos_ratio, neg_ratio)
         
-        # If consistency is low, this window likely has swaps
-        if window_consistency < consistency_threshold:
+        # If consistency is very low, this window likely has swaps
+        # Use stricter threshold (0.5 instead of 0.6) to reduce false positives
+        # Very low consistency (<0.5) is a stronger indicator of swap
+        if window_consistency < 0.5:  # Stricter threshold
             swapped_windows.append((start, end))
             if debug:
-                print(f'Low consistency window [{start}:{end}]: {window_consistency:.3f}')
+                print(f'Very low consistency window [{start}:{end}]: {window_consistency:.3f}')
     
     if len(swapped_windows) == 0:
         return np.empty((0, 2), dtype=int)
@@ -194,27 +227,1470 @@ def detect_swaps_by_cross_sign_consistency(rawData : pd.DataFrame, fps : int = 3
     return np.array(merged_segments)
 
 
-def correct_tracking_errors(rawData : pd.DataFrame, debug : bool = False) -> pd.DataFrame:
+def detect_swaps_by_velocity_ratios(rawData : pd.DataFrame, fps : int = 30,
+                                    window_size : int = 50,
+                                    min_window_size : int = 50,
+                                    percentile_threshold : float = 0.6,
+                                    debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using velocity-based analysis over windows.
+    
+    Calculates head/tail velocity ratios over sliding windows and flags windows
+    where tail velocity consistently exceeds head velocity (indicating a swap).
+    Uses median/percentile thresholds for robustness.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 50)
+    min_window_size : int
+        Minimum window size required for detection (default: 50)
+    percentile_threshold : float
+        Percentile threshold for tail > head velocity (default: 0.6 = 60th percentile)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for velocity calculation
+    filtered = filter_data(rawData)
+    
+    # Calculate speeds
+    hspd = metrics.get_speed_from_df(filtered, 'head', fps=fps)
+    tspd = metrics.get_speed_from_df(filtered, 'tail', fps=fps)
+    
+    # Remove NaN values
+    valid_mask = ~(np.isnan(hspd) | np.isnan(tspd))
+    n_frames = len(rawData)
+    
+    # Use sliding window to find regions where tail > head velocity
+    swapped_windows = []
+    
+    # Slide window across trajectory
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - min_window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Get speeds in this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < min_window_size * 0.5:  # Need at least 50% valid data
+            continue
+        
+        h_window = hspd[start:end][window_mask]
+        t_window = tspd[start:end][window_mask]
+        
+        # Calculate velocity ratio (tail/head)
+        # Use median for robustness
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = t_window / np.maximum(h_window, 0.01)  # Avoid division by zero
+        
+        # Flag if tail velocity consistently exceeds head velocity
+        # Check if percentile of ratios > 1.0 (tail faster than head)
+        if len(ratio) > 0:
+            percentile_value = np.percentile(ratio, percentile_threshold * 100)
+            median_ratio = np.median(ratio)
+            
+            # Swap if median ratio significantly > 1.0 (tail consistently faster)
+            # Use stricter threshold: median > 1.2 or percentile > 1.3 to reduce false positives
+            if median_ratio > 1.2 or percentile_value > 1.3:
+                swapped_windows.append((start, end))
+                if debug:
+                    print(f'Velocity swap window [{start}:{end}]: median_ratio={median_ratio:.3f}, percentile={percentile_value:.3f}')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds (indices are 0 to n_frames-1)
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def get_angular_velocity(data : pd.DataFrame, key : str, fps : int = 30, 
+                        window_size : int = 5) -> np.ndarray:
+    """
+    Calculate angular velocity (rate of change of direction) for a keypoint.
+    
+    Angular velocity measures how quickly the direction of motion changes.
+    Head typically has higher angular velocity than tail (head moves more, tail follows).
+    
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        Position data
+    key : str
+        Keypoint ('head' or 'tail')
+    fps : int
+        Frame rate
+    window_size : int
+        Window size for calculating direction changes (default: 5 frames)
+        
+    Returns:
+    --------
+    np.ndarray
+        Angular velocity in degrees per second
+    """
+    x, y = metrics.vectors_from_key(data, key)
+    n_frames = len(data)
+    
+    angular_velocities = np.zeros(n_frames)
+    angular_velocities[:] = np.nan
+    
+    for i in range(window_size, n_frames - window_size):
+        # Get position vectors in window
+        x_window = x[i-window_size:i+window_size+1]
+        y_window = y[i-window_size:i+window_size+1]
+        
+        # Calculate direction vectors (motion vectors)
+        dx = np.diff(x_window)
+        dy = np.diff(y_window)
+        
+        # Calculate angles between consecutive direction vectors
+        angles = []
+        for j in range(len(dx) - 1):
+            v1 = np.array([dx[j], dy[j]])
+            v2 = np.array([dx[j+1], dy[j+1]])
+            
+            # Normalize vectors
+            norm1 = np.linalg.norm(v1)
+            norm2 = np.linalg.norm(v2)
+            
+            if norm1 > 0.01 and norm2 > 0.01:  # Avoid division by zero
+                cos_angle = np.dot(v1, v2) / (norm1 * norm2)
+                cos_angle = np.clip(cos_angle, -1, 1)
+                angle = np.arccos(cos_angle) * 180 / np.pi
+                angles.append(angle)
+        
+        if len(angles) > 0:
+            # Angular velocity = mean angle change per frame, converted to degrees per second
+            angular_velocities[i] = np.mean(angles) * fps
+    
+    return angular_velocities
+
+
+def detect_swaps_by_angular_velocity(rawData : pd.DataFrame, fps : int = 30,
+                                     window_size : int = 50,
+                                     min_window_size : int = 50,
+                                     ratio_threshold : float = 0.8,
+                                     consistency_window : int = 50,
+                                     debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using angular velocity analysis.
+    
+    Head typically has higher angular velocity than tail (head moves more, tail follows).
+    If tail angular velocity > head angular velocity, it suggests a swap.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 50)
+    min_window_size : int
+        Minimum window size required for detection (default: 50)
+    ratio_threshold : float
+        Threshold for tail/head angular velocity ratio (default: 0.8)
+        If tail_ang_vel / head_ang_vel > threshold, likely swapped
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for angular velocity calculation
+    filtered = filter_data(rawData)
+    
+    # Calculate angular velocities
+    head_ang_vel = get_angular_velocity(filtered, 'head', fps=fps, window_size=5)
+    tail_ang_vel = get_angular_velocity(filtered, 'tail', fps=fps, window_size=5)
+    
+    # Remove NaN values
+    valid_mask = ~(np.isnan(head_ang_vel) | np.isnan(tail_ang_vel))
+    n_frames = len(rawData)
+    
+    # Use sliding window to find regions where tail angular velocity > head
+    swapped_windows = []
+    
+    # Slide window across trajectory
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - min_window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Get angular velocities in this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < min_window_size * 0.5:  # Need at least 50% valid data
+            continue
+        
+        h_ang_vel_window = head_ang_vel[start:end][window_mask]
+        t_ang_vel_window = tail_ang_vel[start:end][window_mask]
+        
+        # Calculate ratio (tail/head angular velocity)
+        # Use median for robustness
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = t_ang_vel_window / np.maximum(h_ang_vel_window, 0.1)  # Avoid division by zero
+        
+        # Flag if tail angular velocity consistently exceeds head
+        if len(ratio) > 0:
+            median_ratio = np.median(ratio)
+            percentile_75 = np.percentile(ratio, 75)
+            
+            # Enhanced detection: Check temporal consistency
+            # Pattern must persist across consistency_window frames
+            is_consistent = True
+            if consistency_window > 0 and end - start >= consistency_window:
+                # Check if pattern persists in larger window
+                consistency_start = max(0, start - consistency_window // 2)
+                consistency_end = min(n_frames, end + consistency_window // 2)
+                consistency_mask = valid_mask[consistency_start:consistency_end]
+                
+                if np.sum(consistency_mask) >= consistency_window * 0.5:
+                    h_consistency = head_ang_vel[consistency_start:consistency_end][consistency_mask]
+                    t_consistency = tail_ang_vel[consistency_start:consistency_end][consistency_mask]
+                    
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        consistency_ratio = t_consistency / np.maximum(h_consistency, 0.1)
+                    
+                    # Pattern is consistent if >70% of frames in larger window show same pattern
+                    consistent_frames = np.sum(consistency_ratio > ratio_threshold) / len(consistency_ratio)
+                    is_consistent = consistent_frames > 0.7
+            
+            # Swap if median ratio > threshold AND pattern is temporally consistent
+            # This indicates tail is moving more erratically than head (suggests swap)
+            if is_consistent and (median_ratio > ratio_threshold or percentile_75 > 1.0):
+                swapped_windows.append((start, end))
+                if debug:
+                    print(f'Angular velocity swap window [{start}:{end}]: median_ratio={median_ratio:.3f}, p75={percentile_75:.3f}, consistent={is_consistent}')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def _calculate_comprehensive_metrics(rawData : pd.DataFrame, start : int, end : int,
+                                    fps : int = 30, validation_window : int = 20,
+                                    angular_vel_ratio : float = 1.0,
+                                    angular_var_ratio : float = 1.0,
+                                    distance_ratio_threshold : float = 0.9,
+                                    speed_ratio_threshold : float = 1.0,
+                                    alignment_angle_threshold : float = 90.0) -> dict:
+    """
+    Calculate all 5 comprehensive metrics for a given segment.
+    
+    Parameters:
+    -----------
+    angular_vel_ratio : float
+        Threshold ratio for angular velocity (tail/head). Default 1.0 means tail > head.
+        Use >1.0 (e.g., 1.1, 1.2) to require stronger signal.
+    angular_var_ratio : float
+        Threshold ratio for angular variation (tail/head). Default 1.0 means tail > head.
+        Use >1.0 (e.g., 1.1, 1.2) to require stronger signal.
+    distance_ratio_threshold : float
+        Threshold for distance ratio (tail/head). Default 0.9 means tail travels >90% of head.
+        Use >0.9 (e.g., 0.95, 1.0, 1.05) for stricter requirement.
+    speed_ratio_threshold : float
+        Threshold for speed ratio (head/tail). Default 1.0 means head < tail.
+        Use <1.0 (e.g., 0.9, 0.95) to require stronger signal.
+    alignment_angle_threshold : float
+        Threshold angle in degrees. Default 90.0 means >90° indicates swap.
+        Use >90.0 (e.g., 100, 110, 120) for stricter requirement.
+    
+    Returns:
+    --------
+    dict
+        Dictionary with metric values and swap indicators.
+    """
+    filtered = filter_data(rawData)
+    segment_data = filtered.iloc[start:end+1]
+    n_seg = len(segment_data)
+    
+    if n_seg < validation_window:
+        return None
+    
+    metrics_result = {
+        'votes': 0,
+        'details': {}
+    }
+    
+    # Metric 1: Absolute Angular Velocity
+    head_ang_vel = get_angular_velocity(segment_data, 'head', fps=fps, window_size=5)
+    tail_ang_vel = get_angular_velocity(segment_data, 'tail', fps=fps, window_size=5)
+    
+    valid_ang_vel = ~(np.isnan(head_ang_vel) | np.isnan(tail_ang_vel))
+    if np.sum(valid_ang_vel) > 0:
+        h_ang_abs = np.abs(head_ang_vel[valid_ang_vel])
+        t_ang_abs = np.abs(tail_ang_vel[valid_ang_vel])
+        
+        median_h_ang = np.median(h_ang_abs)
+        median_t_ang = np.median(t_ang_abs)
+        
+        # Swap if tail absolute angular velocity > head * ratio
+        if median_h_ang > 0.001:  # Avoid division by zero
+            ang_vel_ratio = median_t_ang / median_h_ang
+            indicates_swap = ang_vel_ratio > angular_vel_ratio
+        else:
+            ang_vel_ratio = float('inf') if median_t_ang > 0 else 0.0
+            indicates_swap = median_t_ang > median_h_ang * angular_vel_ratio
+        
+        if indicates_swap:
+            metrics_result['votes'] += 1
+        metrics_result['details']['angular_vel'] = {
+            'head': median_h_ang,
+            'tail': median_t_ang,
+            'ratio': ang_vel_ratio if median_h_ang > 0.001 else 0.0,
+            'indicates_swap': indicates_swap
+        }
+    
+    # Metric 2: Angular Variation (standard deviation of direction changes)
+    x_head, y_head = metrics.vectors_from_key(segment_data, 'head')
+    x_tail, y_tail = metrics.vectors_from_key(segment_data, 'tail')
+    
+    # Calculate direction changes
+    dx_head = np.diff(x_head)
+    dy_head = np.diff(y_head)
+    dx_tail = np.diff(x_tail)
+    dy_tail = np.diff(y_tail)
+    
+    # Calculate angles between consecutive direction vectors
+    head_angles = []
+    tail_angles = []
+    
+    for i in range(len(dx_head) - 1):
+        v1_h = np.array([dx_head[i], dy_head[i]])
+        v2_h = np.array([dx_head[i+1], dy_head[i+1]])
+        v1_t = np.array([dx_tail[i], dy_tail[i]])
+        v2_t = np.array([dx_tail[i+1], dy_tail[i+1]])
+        
+        for v1, v2, angles in [(v1_h, v2_h, head_angles), (v1_t, v2_t, tail_angles)]:
+            norm1 = np.linalg.norm(v1)
+            norm2 = np.linalg.norm(v2)
+            if norm1 > 0.01 and norm2 > 0.01:
+                cos_angle = np.dot(v1, v2) / (norm1 * norm2)
+                cos_angle = np.clip(cos_angle, -1, 1)
+                angle = np.arccos(cos_angle) * 180 / np.pi
+                angles.append(angle)
+    
+    if len(head_angles) > 0 and len(tail_angles) > 0:
+        head_variation = np.std(head_angles)
+        tail_variation = np.std(tail_angles)
+        
+        # Swap if tail variation > head variation * ratio
+        if head_variation > 0.001:  # Avoid division by zero
+            var_ratio = tail_variation / head_variation
+            indicates_swap = var_ratio > angular_var_ratio
+        else:
+            var_ratio = float('inf') if tail_variation > 0 else 0.0
+            indicates_swap = tail_variation > head_variation * angular_var_ratio
+        
+        if indicates_swap:
+            metrics_result['votes'] += 1
+        metrics_result['details']['angular_variation'] = {
+            'head': head_variation,
+            'tail': tail_variation,
+            'ratio': var_ratio if head_variation > 0.001 else 0.0,
+            'indicates_swap': indicates_swap
+        }
+    
+    # Metric 3: Distance Traveled
+    # Calculate cumulative distance
+    head_dist = 0
+    tail_dist = 0
+    
+    for i in range(1, n_seg):
+        h_dx = x_head[i] - x_head[i-1]
+        h_dy = y_head[i] - y_head[i-1]
+        t_dx = x_tail[i] - x_tail[i-1]
+        t_dy = y_tail[i] - y_tail[i-1]
+        
+        if not (np.isnan(h_dx) or np.isnan(h_dy)):
+            head_dist += np.sqrt(h_dx**2 + h_dy**2)
+        if not (np.isnan(t_dx) or np.isnan(t_dy)):
+            tail_dist += np.sqrt(t_dx**2 + t_dy**2)
+    
+    if head_dist > 0.001:  # Avoid division by zero
+        distance_ratio = tail_dist / head_dist
+        # Swap if tail travels more than threshold of head distance
+        indicates_swap = distance_ratio > distance_ratio_threshold
+        if indicates_swap:
+            metrics_result['votes'] += 1
+        metrics_result['details']['distance'] = {
+            'head': head_dist,
+            'tail': tail_dist,
+            'ratio': distance_ratio,
+            'indicates_swap': indicates_swap
+        }
+    
+    # Metric 4: Speed Ratio
+    hspd = metrics.get_speed_from_df(segment_data, 'head', fps=fps)
+    tspd = metrics.get_speed_from_df(segment_data, 'tail', fps=fps)
+    
+    valid_speed = ~(np.isnan(hspd) | np.isnan(tspd))
+    if np.sum(valid_speed) > 0:
+        median_hspd = np.median(hspd[valid_speed])
+        median_tspd = np.median(tspd[valid_speed])
+        
+        if median_hspd > 0.01:  # Avoid division by zero
+            speed_ratio = median_hspd / median_tspd
+            # Swap if head speed < tail speed * threshold (tail faster)
+            indicates_swap = speed_ratio < speed_ratio_threshold
+            if indicates_swap:
+                metrics_result['votes'] += 1
+            metrics_result['details']['speed'] = {
+                'head': median_hspd,
+                'tail': median_tspd,
+                'ratio': speed_ratio,
+                'indicates_swap': indicates_swap
+            }
+    
+    # Metric 5: Alignment Angle
+    tail_pos = segment_data[['xtail', 'ytail']].values
+    mid_pos = segment_data[['xmid', 'ymid']].values
+    
+    # Body orientation vector (tail to midpoint)
+    body_vec = mid_pos - tail_pos
+    
+    # Motion vector (tail displacement)
+    tail_motion = np.diff(tail_pos, axis=0, prepend=tail_pos[0:1] - tail_pos[0:1])
+    
+    alignment_angles = []
+    for i in range(1, len(body_vec)):
+        bv = body_vec[i]
+        tm = tail_motion[i]
+        bv_norm = np.linalg.norm(bv)
+        tm_norm = np.linalg.norm(tm)
+        if bv_norm > 0.01 and tm_norm > 0.01:
+            cos_angle = np.dot(bv, tm) / (bv_norm * tm_norm)
+            cos_angle = np.clip(cos_angle, -1, 1)
+            angle = np.arccos(cos_angle) * 180 / np.pi
+            alignment_angles.append(angle)
+    
+    if len(alignment_angles) > 0:
+        median_alignment = np.median(alignment_angles)
+        # Swap if alignment angle > threshold (backwards motion)
+        indicates_swap = median_alignment > alignment_angle_threshold
+        if indicates_swap:
+            metrics_result['votes'] += 1
+        metrics_result['details']['alignment'] = {
+            'angle': median_alignment,
+            'indicates_swap': indicates_swap
+        }
+    
+    return metrics_result
+
+
+def detect_swaps_by_comprehensive_metrics(rawData : pd.DataFrame, fps : int = 30,
+                                          window_size : int = 75,
+                                          min_votes : int = 3,
+                                          min_segment_size : int = 0,
+                                          min_segment_duration : float = 0.0,
+                                          angular_vel_ratio : float = 1.0,
+                                          angular_var_ratio : float = 1.0,
+                                          distance_ratio_threshold : float = 0.9,
+                                          speed_ratio_threshold : float = 1.0,
+                                          alignment_angle_threshold : float = 90.0,
+                                          debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using comprehensive multi-metric analysis.
+    
+    Uses 5 complementary metrics about head vs tail behavior:
+    1. Absolute angular velocity (head should be larger)
+    2. Angular variation (head should have more variation)
+    3. Distance traveled (head should travel farther)
+    4. Speed ratio (head should be as fast or faster)
+    5. Alignment angle (tail-midpoint should align with motion)
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 75)
+    min_votes : int
+        Minimum number of metrics that must indicate swap (default: 3 out of 5)
+    min_segment_size : int
+        Minimum segment size in frames to keep (default: 0, no filtering)
+    min_segment_duration : float
+        Minimum segment duration in seconds to keep (default: 0.0, no filtering)
+    angular_vel_ratio : float
+        Threshold ratio for angular velocity metric (default: 1.0)
+    angular_var_ratio : float
+        Threshold ratio for angular variation metric (default: 1.0)
+    distance_ratio_threshold : float
+        Threshold for distance ratio metric (default: 0.9)
+    speed_ratio_threshold : float
+        Threshold for speed ratio metric (default: 1.0)
+    alignment_angle_threshold : float
+        Threshold angle in degrees for alignment metric (default: 90.0)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    filtered = filter_data(rawData)
+    n_frames = len(rawData)
+    
+    # Use sliding window to find regions where multiple metrics agree on swap
+    swapped_windows = []
+    
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Calculate comprehensive metrics for this window
+        metrics_result = _calculate_comprehensive_metrics(
+            filtered, start, end, fps=fps, validation_window=20,
+            angular_vel_ratio=angular_vel_ratio,
+            angular_var_ratio=angular_var_ratio,
+            distance_ratio_threshold=distance_ratio_threshold,
+            speed_ratio_threshold=speed_ratio_threshold,
+            alignment_angle_threshold=alignment_angle_threshold
+        )
+        
+        if metrics_result is None:
+            continue
+        
+        # Check if enough metrics indicate swap
+        if metrics_result['votes'] >= min_votes:
+            swapped_windows.append((start, end))
+            if debug:
+                details = metrics_result['details']
+                print(f'Comprehensive metrics swap window [{start}:{end}]: {metrics_result["votes"]}/5 votes')
+                if 'angular_vel' in details:
+                    print(f'  Angular vel: H={details["angular_vel"]["head"]:.2f}, T={details["angular_vel"]["tail"]:.2f}')
+                if 'speed' in details:
+                    print(f'  Speed ratio: {details["speed"]["ratio"]:.3f}')
+                if 'alignment' in details:
+                    print(f'  Alignment: {details["alignment"]["angle"]:.1f}°')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    # Filter by minimum segment size and duration
+    if min_segment_size > 0 or min_segment_duration > 0:
+        filtered_segments = []
+        min_frames = max(min_segment_size, int(min_segment_duration * fps)) if min_segment_duration > 0 else min_segment_size
+        
+        for start, end in merged_segments:
+            segment_length = end - start + 1
+            if segment_length >= min_frames:
+                filtered_segments.append((start, end))
+            elif debug:
+                print(f'Filtered out segment [{start}:{end}] (length {segment_length} < {min_frames})')
+        
+        merged_segments = filtered_segments
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments) if len(merged_segments) > 0 else np.empty((0, 2), dtype=int)
+
+
+def refine_swap_boundaries_comprehensive(rawData : pd.DataFrame, segments : np.ndarray,
+                                        fps : int = 30,
+                                        validation_window : int = 20,
+                                        min_votes : int = 2,
+                                        max_expansion : int = 200,
+                                        gap_threshold : int = 10,
+                                        debug : bool = False) -> np.ndarray:
+    """
+    Refine swap boundaries to find exact swap edges.
+    
+    Expands detected segments frame-by-frame to capture full extent of swaps,
+    not just window-aligned portions.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    segments : np.ndarray
+        Nx2 array of detected swap segments (start, end frames)
+    fps : int
+        Frame rate
+    validation_window : int
+        Window size for validating each frame (default: 20)
+    min_votes : int
+        Minimum votes needed to include a frame (default: 2, more lenient than detection)
+    max_expansion : int
+        Maximum frames to expand in each direction (default: 200)
+    gap_threshold : int
+        Maximum gap between segments to merge (default: 10)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of refined segment boundaries
+    """
+    if len(segments) == 0:
+        return segments
+    
+    filtered = filter_data(rawData)
+    n_frames = len(rawData)
+    refined_segments = []
+    
+    for seg_start, seg_end in segments:
+        # Start with detected boundaries
+        refined_start = seg_start
+        refined_end = seg_end
+        
+        # Expand left (backward)
+        expansion_count = 0
+        while refined_start > 0 and expansion_count < max_expansion:
+            # Check frame at refined_start - 1
+            check_start = max(0, refined_start - validation_window)
+            check_end = refined_start
+            
+            if check_end - check_start < validation_window // 2:
+                break
+            
+            metrics_result = _calculate_comprehensive_metrics(
+                filtered, check_start, check_end, fps=fps, validation_window=validation_window//2
+            )
+            
+            if metrics_result is None:
+                break
+            
+            # If enough votes indicate swap, include this frame
+            if metrics_result['votes'] >= min_votes:
+                refined_start -= 1
+                expansion_count += 1
+            else:
+                break
+        
+        # Expand right (forward)
+        expansion_count = 0
+        while refined_end < n_frames - 1 and expansion_count < max_expansion:
+            # Check frame at refined_end + 1
+            check_start = refined_end + 1
+            check_end = min(n_frames, refined_end + 1 + validation_window)
+            
+            if check_end - check_start < validation_window // 2:
+                break
+            
+            metrics_result = _calculate_comprehensive_metrics(
+                filtered, check_start, check_end, fps=fps, validation_window=validation_window//2
+            )
+            
+            if metrics_result is None:
+                break
+            
+            # If enough votes indicate swap, include this frame
+            if metrics_result['votes'] >= min_votes:
+                refined_end += 1
+                expansion_count += 1
+            else:
+                break
+        
+        # Validate entire refined segment
+        if refined_end > refined_start:
+            final_validation = _calculate_comprehensive_metrics(
+                filtered, refined_start, refined_end, fps=fps, validation_window=20
+            )
+            
+            # Require 3+ votes over entire segment to keep it
+            if final_validation is not None and final_validation['votes'] >= 3:
+                refined_segments.append((refined_start, refined_end))
+                if debug:
+                    print(f'Refined segment [{seg_start}:{seg_end}] -> [{refined_start}:{refined_end}] ({refined_end - refined_start + 1} frames)')
+    
+    if len(refined_segments) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge segments that are close together
+    refined_segments = np.array(refined_segments)
+    refined_segments = refined_segments[refined_segments[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = refined_segments[0]
+    
+    for start, end in refined_segments[1:]:
+        gap = start - current_end - 1
+        if gap <= gap_threshold:  # Merge if within gap threshold
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(refined_segments)} refined segments into {len(merged_segments)} final segments')
+    
+    return np.array(merged_segments)
+
+
+def detect_swaps_by_combined_metrics(rawData : pd.DataFrame, fps : int = 30,
+                                     window_size : int = 50,
+                                     angular_vel_weight : float = 1.0,
+                                     speed_weight : float = 1.0,
+                                     cross_sign_weight : float = 1.0,
+                                     min_votes : int = 2,
+                                     debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using combined metrics: angular velocity, speed ratio, and cross-sign consistency.
+    
+    Uses weighted voting system where multiple metrics must agree to detect a swap.
+    This approach combines the strengths of different detection methods.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 50)
+    angular_vel_weight : float
+        Weight for angular velocity metric (default: 1.0)
+    speed_weight : float
+        Weight for speed ratio metric (default: 1.0)
+    cross_sign_weight : float
+        Weight for cross-sign consistency metric (default: 1.0)
+    min_votes : int
+        Minimum number of metrics that must agree (default: 2, i.e., 2/3 must agree)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for analysis
+    filtered = filter_data(rawData)
+    n_frames = len(rawData)
+    
+    # Calculate all three metrics
+    # Metric 1: Angular velocity
+    head_ang_vel = get_angular_velocity(filtered, 'head', fps=fps, window_size=5)
+    tail_ang_vel = get_angular_velocity(filtered, 'tail', fps=fps, window_size=5)
+    
+    # Metric 2: Speed ratio
+    hspd = metrics.get_speed_from_df(filtered, 'head', fps=fps)
+    tspd = metrics.get_speed_from_df(filtered, 'tail', fps=fps)
+    
+    # Metric 3: Cross-sign consistency
+    cross_sign = metrics.get_ht_cross_sign(filtered)
+    
+    # Create valid mask (frames where all metrics are available)
+    valid_mask = ~(np.isnan(head_ang_vel) | np.isnan(tail_ang_vel) | 
+                   np.isnan(hspd) | np.isnan(tspd) | np.isnan(cross_sign))
+    
+    # Use sliding window to find regions where multiple metrics agree on swap
+    swapped_windows = []
+    
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Get metrics for this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < window_size * 0.5:  # Need at least 50% valid data
+            continue
+        
+        # Extract window data
+        h_ang_vel_window = head_ang_vel[start:end][window_mask]
+        t_ang_vel_window = tail_ang_vel[start:end][window_mask]
+        hspd_window = hspd[start:end][window_mask]
+        tspd_window = tspd[start:end][window_mask]
+        cross_sign_window = cross_sign[start:end][window_mask]
+        
+        # Count votes for swap
+        votes = 0
+        
+        # Vote 1: Angular velocity (tail > head indicates swap)
+        if len(h_ang_vel_window) > 0 and len(t_ang_vel_window) > 0:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                ang_vel_ratio = np.median(t_ang_vel_window) / np.maximum(np.median(h_ang_vel_window), 0.1)
+            if ang_vel_ratio > 1.0:  # Tail angular velocity higher than head
+                votes += angular_vel_weight
+        
+        # Vote 2: Speed ratio (tail > head indicates swap)
+        if len(hspd_window) > 0 and len(tspd_window) > 0:
+            speed_ratio = np.median(tspd_window) / np.maximum(np.median(hspd_window), 0.01)
+            if speed_ratio > 1.2:  # Tail significantly faster
+                votes += speed_weight
+        
+        # Vote 3: Cross-sign consistency (low consistency indicates swap)
+        if len(cross_sign_window) > 0:
+            positive_ratio = np.sum(cross_sign_window > 0) / len(cross_sign_window)
+            negative_ratio = np.sum(cross_sign_window < 0) / len(cross_sign_window)
+            consistency = max(positive_ratio, negative_ratio)
+            if consistency < 0.6:  # Low consistency
+                votes += cross_sign_weight
+        
+        # Check if enough metrics agree (weighted votes >= min_votes)
+        if votes >= min_votes:
+            swapped_windows.append((start, end))
+            if debug:
+                print(f'Combined metrics swap window [{start}:{end}]: votes={votes:.1f}/{angular_vel_weight + speed_weight + cross_sign_weight:.1f}')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def get_acceleration(data : pd.DataFrame, key : str, fps : int = 30, 
+                    npoints : int = 3) -> np.ndarray:
+    """
+    Calculate acceleration (rate of change of speed) for a keypoint.
+    
+    Acceleration measures how quickly speed changes. Head typically has higher
+    acceleration than tail (head moves more dynamically, tail follows).
+    
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        Position data
+    key : str
+        Keypoint ('head' or 'tail')
+    fps : int
+        Frame rate
+    npoints : int
+        Number of points for numerical derivative (default: 3)
+        
+    Returns:
+    --------
+    np.ndarray
+        Acceleration in mm/s²
+    """
+    # Get speed
+    speed = metrics.get_speed_from_df(data, key, fps=fps, npoints=npoints)
+    
+    # Calculate acceleration as rate of change of speed
+    # Use numerical derivative
+    acceleration = np.zeros(len(speed))
+    acceleration[:] = np.nan
+    
+    for i in range(npoints, len(speed) - npoints):
+        # Calculate change in speed over time
+        speed_window = speed[i-npoints:i+npoints+1]
+        valid_speeds = speed_window[~np.isnan(speed_window)]
+        
+        if len(valid_speeds) >= npoints:
+            # Use linear fit to estimate acceleration
+            time_points = np.arange(len(valid_speeds)) / fps
+            if len(time_points) > 1:
+                coeffs = np.polyfit(time_points, valid_speeds, 1)
+                acceleration[i] = coeffs[0]  # Slope = acceleration
+    
+    return acceleration
+
+
+def detect_swaps_by_acceleration(rawData : pd.DataFrame, fps : int = 30,
+                                  window_size : int = 50,
+                                  min_window_size : int = 50,
+                                  ratio_threshold : float = 1.0,
+                                  debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using acceleration analysis.
+    
+    Head typically has higher acceleration than tail (head moves more dynamically).
+    If tail acceleration > head acceleration, it suggests a swap.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 50)
+    min_window_size : int
+        Minimum window size required for detection (default: 50)
+    ratio_threshold : float
+        Threshold for tail/head acceleration ratio (default: 1.0)
+        If tail_accel / head_accel > threshold, likely swapped
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for acceleration calculation
+    filtered = filter_data(rawData)
+    
+    # Calculate accelerations
+    head_accel = get_acceleration(filtered, 'head', fps=fps, npoints=3)
+    tail_accel = get_acceleration(filtered, 'tail', fps=fps, npoints=3)
+    
+    # Remove NaN values
+    valid_mask = ~(np.isnan(head_accel) | np.isnan(tail_accel))
+    n_frames = len(rawData)
+    
+    # Use sliding window to find regions where tail acceleration > head
+    swapped_windows = []
+    
+    # Slide window across trajectory
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - min_window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Get accelerations in this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < min_window_size * 0.5:  # Need at least 50% valid data
+            continue
+        
+        h_accel_window = head_accel[start:end][window_mask]
+        t_accel_window = tail_accel[start:end][window_mask]
+        
+        # Calculate ratio (tail/head acceleration)
+        # Use median for robustness
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = t_accel_window / np.maximum(np.abs(h_accel_window), 0.01)  # Avoid division by zero, use abs for magnitude
+        
+        # Flag if tail acceleration consistently exceeds head
+        if len(ratio) > 0:
+            median_ratio = np.median(ratio)
+            percentile_75 = np.percentile(ratio, 75)
+            
+            # Swap if median ratio > threshold (tail acceleration higher than head)
+            # This indicates tail is accelerating more than head (suggests swap)
+            if median_ratio > ratio_threshold or percentile_75 > 1.2:
+                swapped_windows.append((start, end))
+                if debug:
+                    print(f'Acceleration swap window [{start}:{end}]: median_ratio={median_ratio:.3f}, p75={percentile_75:.3f}')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def get_path_curvature(data : pd.DataFrame, key : str, 
+                       smoothing_window : int = 10) -> np.ndarray:
+    """
+    Calculate path curvature for a keypoint.
+    
+    Curvature measures how curved the path is. Head typically follows more
+    curved paths than tail (head moves more, tail follows).
+    
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        Position data
+    key : str
+        Keypoint ('head' or 'tail')
+    smoothing_window : int
+        Window size for smoothing (default: 10)
+        
+    Returns:
+    --------
+    np.ndarray
+        Curvature values (1/radius of curvature)
+    """
+    x, y = metrics.vectors_from_key(data, key)
+    n_frames = len(data)
+    
+    curvature = np.zeros(n_frames)
+    curvature[:] = np.nan
+    
+    # Calculate curvature using three-point method
+    for i in range(smoothing_window, n_frames - smoothing_window):
+        # Get smoothed positions
+        x_window = x[i-smoothing_window:i+smoothing_window+1]
+        y_window = y[i-smoothing_window:i+smoothing_window+1]
+        
+        # Remove NaN values
+        valid_mask = ~(np.isnan(x_window) | np.isnan(y_window))
+        if np.sum(valid_mask) < 3:
+            continue
+        
+        x_valid = x_window[valid_mask]
+        y_valid = y_window[valid_mask]
+        
+        if len(x_valid) >= 3:
+            # Use three consecutive points to calculate curvature
+            # Curvature = |x'y'' - y'x''| / (x'^2 + y'^2)^(3/2)
+            dx = np.diff(x_valid)
+            dy = np.diff(y_valid)
+            ddx = np.diff(dx)
+            ddy = np.diff(dy)
+            
+            if len(dx) >= 2 and len(ddx) >= 1:
+                # Use middle points
+                mid = len(dx) // 2
+                x_prime = dx[mid] if mid < len(dx) else dx[-1]
+                y_prime = dy[mid] if mid < len(dy) else dy[-1]
+                x_double_prime = ddx[mid-1] if mid > 0 and mid-1 < len(ddx) else ddx[-1] if len(ddx) > 0 else 0
+                y_double_prime = ddy[mid-1] if mid > 0 and mid-1 < len(ddy) else ddy[-1] if len(ddy) > 0 else 0
+                
+                numerator = abs(x_prime * y_double_prime - y_prime * x_double_prime)
+                denominator = (x_prime**2 + y_prime**2)**1.5
+                
+                if denominator > 1e-6:  # Avoid division by zero
+                    curvature[i] = numerator / denominator
+    
+    return curvature
+
+
+def detect_swaps_by_curvature(rawData : pd.DataFrame, fps : int = 30,
+                               window_size : int = 50,
+                               curvature_threshold : float = 1.0,
+                               smoothing_window : int = 10,
+                               debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using curvature analysis.
+    
+    Head typically follows more curved paths than tail (head moves more, tail follows).
+    If tail curvature > head curvature, it suggests a swap.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window in frames (default: 50)
+    curvature_threshold : float
+        Threshold for tail/head curvature ratio (default: 1.0)
+        If tail_curvature / head_curvature > threshold, likely swapped
+    smoothing_window : int
+        Window size for curvature smoothing (default: 10)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for curvature calculation
+    filtered = filter_data(rawData)
+    
+    # Calculate curvatures
+    head_curvature = get_path_curvature(filtered, 'head', smoothing_window=smoothing_window)
+    tail_curvature = get_path_curvature(filtered, 'tail', smoothing_window=smoothing_window)
+    
+    # Remove NaN values
+    valid_mask = ~(np.isnan(head_curvature) | np.isnan(tail_curvature))
+    n_frames = len(rawData)
+    
+    # Use sliding window to find regions where tail curvature > head
+    swapped_windows = []
+    
+    # Slide window across trajectory
+    step_size = window_size // 2  # 50% overlap
+    for start in range(0, n_frames - window_size + 1, step_size):
+        end = min(start + window_size, n_frames)
+        
+        # Get curvatures in this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < window_size * 0.5:  # Need at least 50% valid data
+            continue
+        
+        h_curv_window = head_curvature[start:end][window_mask]
+        t_curv_window = tail_curvature[start:end][window_mask]
+        
+        # Calculate ratio (tail/head curvature)
+        # Use median for robustness
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = t_curv_window / np.maximum(h_curv_window, 0.001)  # Avoid division by zero
+        
+        # Flag if tail curvature consistently exceeds head
+        if len(ratio) > 0:
+            median_ratio = np.median(ratio)
+            percentile_75 = np.percentile(ratio, 75)
+            
+            # Swap if median ratio > threshold (tail curvature higher than head)
+            # This indicates tail path is more curved than head (suggests swap)
+            if median_ratio > curvature_threshold or percentile_75 > 1.2:
+                swapped_windows.append((start, end))
+                if debug:
+                    print(f'Curvature swap window [{start}:{end}]: median_ratio={median_ratio:.3f}, p75={percentile_75:.3f}')
+    
+    if len(swapped_windows) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping windows into segments
+    swapped_windows = np.array(swapped_windows)
+    swapped_windows = swapped_windows[swapped_windows[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_windows[0]
+    
+    for start, end in swapped_windows[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_windows)} windows into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def detect_swaps_by_temporal_consistency(rawData : pd.DataFrame, fps : int = 30,
+                                        baseline_window : int = 200,
+                                        change_threshold : float = 0.3,
+                                        validation_window : int = 50,
+                                        debug : bool = False) -> np.ndarray:
+    """
+    Detect swap segments using temporal consistency patterns.
+    
+    Analyzes long-term patterns: if head angular velocity consistently > tail
+    over long periods, sudden reversals indicate swaps. Uses change-point
+    detection to identify when patterns reverse.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    baseline_window : int
+        Window size for establishing baseline pattern (default: 200 frames)
+    change_threshold : float
+        Threshold for detecting pattern change (default: 0.3)
+        If pattern changes by >threshold, likely a swap
+    validation_window : int
+        Window size for validating detected changes (default: 50)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments
+    """
+    # Filter data for analysis
+    filtered = filter_data(rawData)
+    n_frames = len(rawData)
+    
+    # Calculate angular velocities
+    head_ang_vel = get_angular_velocity(filtered, 'head', fps=fps, window_size=5)
+    tail_ang_vel = get_angular_velocity(filtered, 'tail', fps=fps, window_size=5)
+    
+    # Remove NaN values
+    valid_mask = ~(np.isnan(head_ang_vel) | np.isnan(tail_ang_vel))
+    
+    # Calculate ratio over time
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratio = tail_ang_vel / np.maximum(head_ang_vel, 0.1)
+    
+    # Establish baseline pattern: head angular velocity should be > tail
+    # So baseline ratio should be < 1.0
+    baseline_ratio = []
+    for i in range(0, min(baseline_window, n_frames), validation_window):
+        end = min(i + validation_window, n_frames)
+        window_mask = valid_mask[i:end]
+        if np.sum(window_mask) > validation_window * 0.5:
+            window_ratio = ratio[i:end][window_mask]
+            if len(window_ratio) > 0:
+                baseline_ratio.append(np.median(window_ratio))
+    
+    if len(baseline_ratio) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    baseline_median = np.median(baseline_ratio)
+    
+    # Detect change points where pattern reverses
+    swapped_segments = []
+    
+    # Slide window across trajectory
+    step_size = validation_window // 2
+    for start in range(baseline_window, n_frames - validation_window + 1, step_size):
+        end = min(start + validation_window, n_frames)
+        
+        # Get ratio in this window
+        window_mask = valid_mask[start:end]
+        if np.sum(window_mask) < validation_window * 0.5:
+            continue
+        
+        window_ratio = ratio[start:end][window_mask]
+        if len(window_ratio) == 0:
+            continue
+        
+        median_ratio = np.median(window_ratio)
+        
+        # Detect change: if ratio increases significantly from baseline, likely swap
+        ratio_change = median_ratio - baseline_median
+        
+        if ratio_change > change_threshold:
+            # Pattern reversed: tail angular velocity now > head (suggests swap)
+            # Validate with additional metrics
+            hspd = metrics.get_speed_from_df(filtered.iloc[start:end], 'head', fps=fps)
+            tspd = metrics.get_speed_from_df(filtered.iloc[start:end], 'tail', fps=fps)
+            
+            valid_hspd = hspd[~np.isnan(hspd)]
+            valid_tspd = tspd[~np.isnan(tspd)]
+            
+            # Additional validation: speed ratio should also indicate swap
+            if len(valid_hspd) > 0 and len(valid_tspd) > 0:
+                speed_ratio = np.median(valid_tspd) / np.maximum(np.median(valid_hspd), 0.01)
+                if speed_ratio > 1.2:  # Tail faster confirms swap
+                    swapped_segments.append((start, end))
+                    if debug:
+                        print(f'Temporal consistency swap [{start}:{end}]: ratio_change={ratio_change:.3f}, speed_ratio={speed_ratio:.3f}')
+    
+    if len(swapped_segments) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    # Merge overlapping segments
+    swapped_segments = np.array(swapped_segments)
+    swapped_segments = swapped_segments[swapped_segments[:, 0].argsort()]
+    
+    merged_segments = []
+    current_start, current_end = swapped_segments[0]
+    
+    for start, end in swapped_segments[1:]:
+        if start <= current_end:  # Overlapping or adjacent
+            current_end = max(current_end, end)
+        else:
+            merged_segments.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged_segments.append((current_start, current_end))
+    
+    # Ensure segments don't exceed DataFrame bounds
+    merged_segments = [(max(0, start), min(end, n_frames - 1)) for start, end in merged_segments]
+    
+    if debug:
+        print(f'Merged {len(swapped_segments)} segments into {len(merged_segments)} segments')
+    
+    return np.array(merged_segments)
+
+
+def correct_tracking_errors(rawData : pd.DataFrame, fps : int = 30, debug : bool = False,
+                           comprehensive_params : dict = None) -> pd.DataFrame:
     """
     Remove tracking errors and correct head-tail swaps
     TODO: address errors where centroid overlaps head / tail
 
     rawData: dataFrame with imported piVR data
-    fps: frame rate (needed for segment-based detection)
+    fps: frame rate (default: 30)
     debug: print debug messages
+    comprehensive_params: dict with parameters for comprehensive metrics approach
+        If None, only baseline methods are used.
+        Parameters: min_votes, window_size, min_segment_size, min_segment_duration,
+                   angular_vel_ratio, angular_var_ratio, distance_ratio_threshold,
+                   speed_ratio_threshold, alignment_angle_threshold
     """
     data = rawData.copy()
 
-    # Flag frames where swaps appear to occur (frame-by-frame detection)
+    # BASELINE: Flag frames where swaps appear to occur (frame-by-frame detection)
     swaps = flag_all_swaps(data,separate=False,debug=debug)
 
-    # correct remaining head-tail swaps in segments
+    # BASELINE: correct remaining head-tail swaps in segments
     segments = utils.indices_to_segments(swaps,nframes=data.shape[0],addBounds=True,inclusive=True,alternating=True)
     data = correct_swapped_segments(data,segments,debug=debug)
     
-    # Apply original simple global swap detection (baseline)
+    # BASELINE: Apply original simple global swap detection
     data = correct_global_swap_simple(data, debug=debug)
+    
+    # OPTIONAL: Apply comprehensive metrics detection for remaining errors
+    if comprehensive_params is not None:
+        # Only look for new segments in regions not already corrected by baseline
+        corrected_frames_mask = np.zeros(len(data), dtype=bool)
+        for start, end in segments:
+            corrected_frames_mask[start:end+1] = True
+        
+        # Find uncorrected regions
+        uncorrected_segments = utils.indices_to_segments(
+            ~corrected_frames_mask, nframes=len(data), addBounds=False, 
+            inclusive=True, alternating=True
+        )
+        
+        new_segments_found = []
+        for start, end in uncorrected_segments:
+            # Apply comprehensive detection to uncorrected segments
+            comprehensive_swaps = detect_swaps_by_comprehensive_metrics(
+                data.iloc[start:end+1], fps=fps, debug=debug, **comprehensive_params
+            )
+            # Adjust segment indices back to original data frame
+            if len(comprehensive_swaps) > 0:
+                adjusted_swaps = [(s + start, e + start) for s, e in comprehensive_swaps]
+                new_segments_found.extend(adjusted_swaps)
+
+        if len(new_segments_found) > 0:
+            if debug:
+                print(f'Correcting {len(new_segments_found)} new segments detected by comprehensive metrics')
+            # Refine boundaries for these new segments
+            refined_new_segments = []
+            for seg_start, seg_end in new_segments_found:
+                refined = refine_swap_boundaries_comprehensive(
+                    data, np.array([[seg_start, seg_end]]), fps=fps, debug=debug
+                )
+                if len(refined) > 0:
+                    refined_new_segments.append((refined[0][0], refined[0][1]))
+            
+            if len(refined_new_segments) > 0:
+                # Merge overlapping segments before correction
+                merged_new_segments = _merge_nearby_segments(refined_new_segments, gap=20)
+                data = correct_swapped_segments(data, merged_new_segments, debug=debug)
+    
     return data
+
+
+def _merge_nearby_segments(segments : list[tuple[int, int]], gap : int = 20) -> list[tuple[int, int]]:
+    """
+    Merge segments that are within gap frames of each other.
+    
+    Parameters:
+    -----------
+    segments : list[tuple[int, int]]
+        List of (start, end) segment tuples
+    gap : int
+        Maximum gap between segments to merge (default: 20 frames)
+        
+    Returns:
+    --------
+    list[tuple[int, int]]
+        Merged segments
+    """
+    if len(segments) == 0:
+        return []
+    
+    # Sort by start frame
+    segments = sorted(segments, key=lambda seg: seg[0])
+    
+    merged = []
+    current_start, current_end = segments[0]
+    
+    for start, end in segments[1:]:
+        if start <= current_end + gap:  # Overlapping or within gap
+            current_end = max(current_end, end)
+        else:
+            merged.append((current_start, current_end))
+            current_start, current_end = start, end
+    
+    merged.append((current_start, current_end))
+    return merged
 
 
 def expand_and_merge_flagged_frames(flagged_frames : np.ndarray, nframes : int,
@@ -250,17 +1726,28 @@ def expand_and_merge_flagged_frames(flagged_frames : np.ndarray, nframes : int,
     if len(flagged_frames) == 0:
         return flagged_frames
     
-    # Step 1: Expand around each flagged frame
-    expanded = set()
-    for frame in flagged_frames:
-        start = max(0, frame - expand_window)
-        end = min(nframes - 1, frame + expand_window)
-        expanded.update(range(start, end + 1))
+    # Step 1: Expand around flagged frames, but only if there's strong temporal consistency
+    # Very conservative: only expand if 3+ frames are nearby within a larger window
+    # This reduces false positives while still catching contiguous segments
+    expanded = set(flagged_frames)  # Start with original flagged frames
+    
+    # For each flagged frame, check if there are other flagged frames nearby
+    # Only expand if we have strong evidence of a cluster (at least 3 frames within expand_window*3)
+    for i, frame in enumerate(flagged_frames):
+        # Count nearby flagged frames
+        nearby_count = np.sum(np.abs(flagged_frames - frame) <= expand_window * 3)
+        
+        # Only expand if we have a strong cluster (at least 3 frames nearby)
+        # Use smaller expansion window (5 instead of 10) to be more conservative
+        if nearby_count >= 3:
+            start = max(0, frame - 5)  # Smaller window
+            end = min(nframes - 1, frame + 5)
+            expanded.update(range(start, end + 1))
     
     expanded = np.array(sorted(expanded))
     
     if debug:
-        print(f'After expansion: {len(flagged_frames)} → {len(expanded)} frames')
+        print(f'After conservative expansion: {len(flagged_frames)} → {len(expanded)} frames')
     
     # Step 2: Find gaps and merge nearby regions
     if len(expanded) == 0:
@@ -1036,6 +2523,431 @@ def detect_swaps_between_collapsed_regions(rawData : pd.DataFrame, fps : int = 3
             print(f'  Segments: {swapped_segments}')
     
     return swapped_segments
+
+
+def refine_swap_boundaries_in_segment(rawData : pd.DataFrame, segment_start : int, segment_end : int,
+                                     fps : int = 30, window_size : int = 50,
+                                     debug : bool = False) -> tuple[int, int] | None:
+    """
+    Refine swap boundaries within a segment to find the actual start and end of a swap.
+    
+    Takes a segment between collapsed regions and uses multiple metrics to find where
+    the swap actually starts and ends, rather than assuming the entire segment is swapped.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    segment_start : int
+        Start frame of the segment to analyze
+    segment_end : int
+        End frame of the segment to analyze
+    fps : int
+        Frame rate
+    window_size : int
+        Size of sliding window for analysis (default: 50 frames)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    tuple[int, int] | None
+        Refined start and end frames of the swap, or None if no swap detected
+    """
+    if segment_end <= segment_start:
+        return None
+    
+    segment_length = segment_end - segment_start + 1
+    # No minimum size restriction - can refine segments of any size
+    
+    # Filter data for analysis
+    filtered = filter_data(rawData)
+    
+    # Calculate metrics for the segment
+    segment_data = filtered.iloc[segment_start:segment_end+1]
+    
+    # Metric 1: Alignment angles (backwards motion indicates swap)
+    # Calculate alignment angle for each frame in segment
+    tail_pos = segment_data[['xtail', 'ytail']].values
+    mid_pos = segment_data[['xmid', 'ymid']].values
+    
+    # Body orientation vector (tail to midpoint)
+    body_vec = mid_pos - tail_pos
+    
+    # Motion vector (tail displacement)
+    tail_motion = np.diff(tail_pos, axis=0, prepend=tail_pos[0:1] - tail_pos[0:1])
+    
+    # Calculate angles
+    alignment_angles = []
+    for i in range(len(body_vec)):
+        if i == 0:
+            alignment_angles.append(np.nan)
+            continue
+        bv = body_vec[i]
+        tm = tail_motion[i]
+        # Normalize vectors
+        bv_norm = np.linalg.norm(bv)
+        tm_norm = np.linalg.norm(tm)
+        if bv_norm > 0.01 and tm_norm > 0.01:  # Avoid division by zero
+            cos_angle = np.dot(bv, tm) / (bv_norm * tm_norm)
+            cos_angle = np.clip(cos_angle, -1, 1)
+            angle = np.arccos(cos_angle) * 180 / np.pi
+            alignment_angles.append(angle)
+        else:
+            alignment_angles.append(np.nan)
+    
+    alignment_angles = np.array(alignment_angles)
+    
+    # Metric 2: Cross-sign consistency
+    cross_sign = metrics.get_ht_cross_sign(segment_data)
+    
+    # Metric 3: Speed ratios
+    hspd = metrics.get_speed_from_df(segment_data, 'head', fps=fps)
+    tspd = metrics.get_speed_from_df(segment_data, 'tail', fps=fps)
+    
+    # Use sliding window to find swap boundaries
+    swapped_frames = np.zeros(segment_length, dtype=bool)
+    
+    step_size = window_size // 2  # 50% overlap
+    for start_offset in range(0, segment_length - window_size + 1, step_size):
+        end_offset = min(start_offset + window_size, segment_length)
+        window_start = segment_start + start_offset
+        window_end = segment_start + end_offset - 1
+        
+        # Get metrics for this window
+        window_angles = alignment_angles[start_offset:end_offset]
+        window_signs = cross_sign[start_offset:end_offset]
+        window_hspd = hspd[start_offset:end_offset]
+        window_tspd = tspd[start_offset:end_offset]
+        
+        # Remove NaN values
+        valid_angles = window_angles[~np.isnan(window_angles)]
+        valid_signs = window_signs[~np.isnan(window_signs)]
+        valid_hspd = window_hspd[~np.isnan(window_hspd)]
+        valid_tspd = window_tspd[~np.isnan(window_tspd)]
+        
+        if len(valid_angles) == 0 and len(valid_signs) == 0:
+            continue
+        
+        # Vote-based detection: swap if multiple indicators agree
+        votes = 0
+        
+        # Alignment angle: large angles (90-180°) indicate backwards motion (swap)
+        if len(valid_angles) > 0:
+            median_angle = np.median(valid_angles)
+            if median_angle > 90:  # Backwards motion
+                votes += 1
+        
+        # Cross-sign: low consistency indicates swap
+        if len(valid_signs) > 0:
+            positive_ratio = np.sum(valid_signs > 0) / len(valid_signs)
+            negative_ratio = np.sum(valid_signs < 0) / len(valid_signs)
+            consistency = max(positive_ratio, negative_ratio)
+            if consistency < 0.6:  # Low consistency
+                votes += 1
+        
+        # Speed ratio: tail > head indicates swap
+        if len(valid_hspd) > 0 and len(valid_tspd) > 0:
+            median_ratio = np.median(valid_tspd) / np.maximum(np.median(valid_hspd), 0.01)
+            if median_ratio > 1.2:  # Tail significantly faster
+                votes += 1
+        
+        # If 2+ votes, mark window as swapped
+        if votes >= 2:
+            swapped_frames[start_offset:end_offset] = True
+    
+    # Find contiguous swapped regions
+    swapped_indices = np.where(swapped_frames)[0]
+    if len(swapped_indices) == 0:
+        return None
+    
+    # Get consecutive ranges
+    swapped_ranges = utils.get_consecutive_ranges(swapped_indices)
+    
+    # Return the largest swapped region (or merge if close together)
+    if len(swapped_ranges) == 0:
+        return None
+    
+    # Merge nearby regions (within 50 frames)
+    merged_ranges = []
+    current_start, current_end = swapped_ranges[0]
+    for start, end in swapped_ranges[1:]:
+        gap = start - current_end - 1
+        if gap <= 50:  # Merge if close
+            current_end = end
+        else:
+            merged_ranges.append((current_start, current_end))
+            current_start, current_end = start, end
+    merged_ranges.append((current_start, current_end))
+    
+    # Return the largest merged region
+    largest_range = max(merged_ranges, key=lambda r: r[1] - r[0])
+    refined_start = segment_start + largest_range[0]
+    refined_end = segment_start + largest_range[1]
+    
+    if debug:
+        print(f'  Refined segment [{segment_start}:{segment_end}] ({segment_length} frames)')
+        print(f'    -> Swap region [{refined_start}:{refined_end}] ({refined_end - refined_start + 1} frames)')
+    
+    return (refined_start, refined_end)
+
+
+def validate_swap_segment(rawData : pd.DataFrame, segment_start : int, segment_end : int,
+                         fps : int = 30, is_collapsed_region_segment : bool = False,
+                         debug : bool = False) -> bool:
+    """
+    Validate a swap segment using multi-metric consensus.
+    
+    Uses three metrics to determine if a segment is truly swapped:
+    1. Alignment angle: median > 90° (backwards motion)
+    2. Cross-sign consistency: < 0.6 (low consistency)
+    3. Speed ratio: tail/head > 1.2 (tail faster)
+    
+    Requires 2+ metrics to agree for validation (conservative approach).
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    segment_start : int
+        Start frame of the segment
+    segment_end : int
+        End frame of the segment
+    fps : int
+        Frame rate
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    bool
+        True if segment is validated as swapped (2+ metrics agree)
+    """
+    if segment_end <= segment_start:
+        return False
+    
+    # Filter data for analysis
+    filtered = filter_data(rawData)
+    segment_data = filtered.iloc[segment_start:segment_end+1]
+    
+    # Metric 1: Alignment angles
+    tail_pos = segment_data[['xtail', 'ytail']].values
+    mid_pos = segment_data[['xmid', 'ymid']].values
+    body_vec = mid_pos - tail_pos
+    tail_motion = np.diff(tail_pos, axis=0, prepend=tail_pos[0:1] - tail_pos[0:1])
+    
+    alignment_angles = []
+    for i in range(1, len(body_vec)):
+        bv = body_vec[i]
+        tm = tail_motion[i]
+        bv_norm = np.linalg.norm(bv)
+        tm_norm = np.linalg.norm(tm)
+        if bv_norm > 0.01 and tm_norm > 0.01:
+            cos_angle = np.dot(bv, tm) / (bv_norm * tm_norm)
+            cos_angle = np.clip(cos_angle, -1, 1)
+            angle = np.arccos(cos_angle) * 180 / np.pi
+            alignment_angles.append(angle)
+    
+    alignment_angles = np.array(alignment_angles)
+    
+    # Metric 2: Cross-sign consistency
+    cross_sign = metrics.get_ht_cross_sign(segment_data)
+    
+    # Metric 3: Speed ratios
+    hspd = metrics.get_speed_from_df(segment_data, 'head', fps=fps)
+    tspd = metrics.get_speed_from_df(segment_data, 'tail', fps=fps)
+    
+    # Count votes
+    votes = 0
+    
+    # Alignment angle check
+    # For collapsed region segments, require stronger evidence (> 120°)
+    if len(alignment_angles) > 0:
+        median_angle = np.median(alignment_angles[~np.isnan(alignment_angles)])
+        angle_threshold = 120 if is_collapsed_region_segment else 90
+        if not np.isnan(median_angle) and median_angle > angle_threshold:
+            votes += 1
+            if debug:
+                print(f'  Alignment angle: {median_angle:.1f}° (backwards motion, threshold={angle_threshold}°) ✓')
+    
+    # Cross-sign consistency check
+    valid_signs = cross_sign[~np.isnan(cross_sign)]
+    if len(valid_signs) > 0:
+        positive_ratio = np.sum(valid_signs > 0) / len(valid_signs)
+        negative_ratio = np.sum(valid_signs < 0) / len(valid_signs)
+        consistency = max(positive_ratio, negative_ratio)
+        if consistency < 0.6:
+            votes += 1
+            if debug:
+                print(f'  Cross-sign consistency: {consistency:.3f} (low) ✓')
+    
+    # Speed ratio check
+    # For collapsed region segments, require stronger evidence (> 1.5)
+    valid_hspd = hspd[~np.isnan(hspd)]
+    valid_tspd = tspd[~np.isnan(tspd)]
+    if len(valid_hspd) > 0 and len(valid_tspd) > 0:
+        median_ratio = np.median(valid_tspd) / np.maximum(np.median(valid_hspd), 0.01)
+        ratio_threshold = 1.5 if is_collapsed_region_segment else 1.2
+        if median_ratio > ratio_threshold:
+            votes += 1
+            if debug:
+                print(f'  Speed ratio: {median_ratio:.3f} (tail faster, threshold={ratio_threshold}) ✓')
+    
+    # Require 2+ votes for validation
+    # For segments between collapsed regions, use stricter thresholds but allow 2/3 votes
+    # For small segments, require all 3 metrics
+    segment_length = segment_end - segment_start + 1
+    
+    if is_collapsed_region_segment and segment_length >= 500:
+        # Large segments between collapsed regions: require 2+ votes but with stronger evidence
+        # Check if the evidence is strong enough (e.g., alignment > 100° or speed ratio > 1.3)
+        has_strong_evidence = False
+        if len(alignment_angles) > 0:
+            median_angle = np.median(alignment_angles[~np.isnan(alignment_angles)])
+            if not np.isnan(median_angle) and median_angle > 100:
+                has_strong_evidence = True
+        if not has_strong_evidence and len(valid_hspd) > 0 and len(valid_tspd) > 0:
+            median_ratio = np.median(valid_tspd) / np.maximum(np.median(valid_hspd), 0.01)
+            if median_ratio > 1.3:
+                has_strong_evidence = True
+        
+        # Require 2+ votes AND strong evidence for large collapsed region segments
+        is_valid = votes >= 2 and has_strong_evidence
+        if debug:
+            print(f'  Large collapsed region segment: {votes}/3 votes, strong_evidence={has_strong_evidence}')
+    elif segment_length < 100:
+        # Small segments: require all 3 metrics to agree (very conservative)
+        is_valid = votes >= 3
+    else:
+        # Larger segments from sparse frames: require 2+ votes (standard)
+        is_valid = votes >= 2
+    
+    if debug:
+        result_str = "VALID" if is_valid else "REJECTED"
+        print(f'  Validation: {votes}/3 votes, result: {result_str}')
+    
+    return is_valid
+
+
+def expand_segments_with_refinement(rawData : pd.DataFrame, sparse_frames : np.ndarray,
+                                    fps : int = 30, expand_window : int = 10,
+                                    debug : bool = False) -> list[tuple[int, int]]:
+    """
+    Expand sparse frames into segments and refine their boundaries.
+    
+    Takes sparse frames from frame-by-frame detection, forms conservative
+    initial segments, and applies boundary refinement to each.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    sparse_frames : np.ndarray
+        Sparse frame indices from flag_all_swaps()
+    fps : int
+        Frame rate
+    expand_window : int
+        Number of frames to expand around each sparse frame (default: 10)
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    list[tuple[int, int]]
+        List of refined segment boundaries (start, end)
+    """
+    if len(sparse_frames) == 0:
+        return []
+    
+    n_frames = len(rawData)
+    
+    # Form initial segments from sparse frames with conservative expansion
+    expanded = set()
+    for frame in sparse_frames:
+        start = max(0, frame - expand_window)
+        end = min(n_frames - 1, frame + expand_window)
+        expanded.update(range(start, end + 1))
+    
+    expanded = np.array(sorted(expanded))
+    
+    # Get consecutive ranges
+    ranges = utils.get_consecutive_ranges(expanded)
+    
+    # Refine boundaries for each range
+    refined_segments = []
+    for start, end in ranges:
+        refined = refine_swap_boundaries_in_segment(
+            rawData, start, end, fps=fps, window_size=50, debug=debug
+        )
+        if refined is not None:
+            refined_segments.append(refined)
+    
+    if debug:
+        print(f'Expanded {len(sparse_frames)} sparse frames into {len(ranges)} segments')
+        print(f'Refined to {len(refined_segments)} swap segments')
+    
+    return refined_segments
+
+
+def detect_swaps_with_refined_boundaries(rawData : pd.DataFrame, fps : int = 30,
+                                         mode : str = 'alignment',
+                                         minTime : float = 0.5,
+                                         thresh : tuple[float,float] = (0.95,1.05),
+                                         debug : bool = False) -> np.ndarray:
+    """
+    Detect swaps between collapsed regions with refined boundaries.
+    
+    First identifies segments between collapsed regions that appear swapped,
+    then refines the boundaries to find the actual swap region within each segment.
+    
+    Parameters:
+    -----------
+    rawData : pd.DataFrame
+        Raw position data
+    fps : int
+        Frame rate
+    mode : str
+        Detection mode for initial segment detection
+    minTime : float
+        Minimum segment duration (seconds)
+    thresh : tuple[float,float]
+        Thresholds for detection
+    debug : bool
+        Print debug messages
+        
+    Returns:
+    --------
+    np.ndarray
+        Nx2 array of start and end frames of swapped segments (with refined boundaries)
+    """
+    # First, get segments between collapsed regions that appear swapped
+    candidate_segments = detect_swaps_between_collapsed_regions(
+        rawData, fps=fps, mode=mode, minTime=minTime, thresh=thresh, debug=debug
+    )
+    
+    if len(candidate_segments) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    if debug:
+        print(f'Found {len(candidate_segments)} candidate segments, refining boundaries...')
+    
+    # Refine boundaries for each candidate segment
+    refined_segments = []
+    for seg in candidate_segments:
+        start, end = seg
+        refined = refine_swap_boundaries_in_segment(
+            rawData, start, end, fps=fps, window_size=50, debug=debug
+        )
+        if refined is not None:
+            refined_segments.append(refined)
+    
+    if len(refined_segments) == 0:
+        return np.empty((0, 2), dtype=int)
+    
+    if debug:
+        print(f'Refined to {len(refined_segments)} swap segments')
+    
+    return np.array(refined_segments)
 
 
 def correct_global_swap_simple(rawData : pd.DataFrame, debug : bool = False) -> pd.DataFrame:
