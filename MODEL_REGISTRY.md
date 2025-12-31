@@ -1,6 +1,6 @@
 # ML Model Registry
 
-**Generated**: 2025-12-31 17:22:47
+**Generated**: 2025-12-31 17:53:47
 
 This registry documents all trained ML models for swap detection in animal tracking data.
 
@@ -89,32 +89,12 @@ Actual No Swap  38513     54
 
 ### Usage
 ```python
-import pickle
-import pandas as pd
-from swap_correction import ml_features_optimized, pivr_loader
+from swap_correction.ml.api import SwapPredictor
 
-# Load model and preprocessing
-with open('ml_models/swap_detector_xgb.pkl', 'rb') as f:
-    model = pickle.load(f)
-with open('ml_models/feature_scaler.pkl', 'rb') as f:
-    scaler = pickle.load(f)
-with open('ml_models/feature_imputer.pkl', 'rb') as f:
-    imputer = pickle.load(f)
-
-# Load level1 data
-trial_data = pivr_loader.load_raw_data(trial_dir, 'trial_level1.csv', px2mm=True)
-fps = pivr_loader.get_all_settings(trial_dir)['Framerate']
-
-# Extract features
-features = ml_features_optimized.extract_all_frame_features_optimized(
-    trial_data, fps=fps, apply_filtering=True, filter_sigma=4.6
-)
-
-# Preprocess and predict
-X = imputer.transform(features.values)
-X = scaler.transform(X)
-predictions = model.predict(X)
-probabilities = model.predict_proba(X)[:, 1]
+# Simple usage
+predictor = SwapPredictor(model_type='level1')
+predictions = predictor.predict(trial_data, fps=30)
+segments = predictor.predict_segments(trial_data, fps=30)
 ```
 
 ### Use Case
@@ -200,32 +180,12 @@ Actual No Swap  22869    605
 
 ### Usage
 ```python
-import pickle
-import pandas as pd
-from swap_correction import ml_features_optimized, pivr_loader
+from swap_correction.ml.api import SwapPredictor
 
-# Load model and preprocessing
-with open('ml_models_raw/swap_detector_xgb.pkl', 'rb') as f:
-    model = pickle.load(f)
-with open('ml_models_raw/feature_scaler.pkl', 'rb') as f:
-    scaler = pickle.load(f)
-with open('ml_models_raw/feature_imputer.pkl', 'rb') as f:
-    imputer = pickle.load(f)
-
-# Load raw data
-trial_data = pivr_loader.load_raw_data(trial_dir, 'trial_data.csv', px2mm=True)
-fps = pivr_loader.get_all_settings(trial_dir)['Framerate']
-
-# Extract features
-features = ml_features_optimized.extract_all_frame_features_optimized(
-    trial_data, fps=fps, apply_filtering=True, filter_sigma=4.6
-)
-
-# Preprocess and predict
-X = imputer.transform(features.values)
-X = scaler.transform(X)
-predictions = model.predict(X)
-probabilities = model.predict_proba(X)[:, 1]
+# Simple usage
+predictor = SwapPredictor(model_type='raw')
+predictions = predictor.predict(trial_data, fps=30)
+segments = predictor.predict_segments(trial_data, fps=30)
 ```
 
 ### Use Case
@@ -265,8 +225,9 @@ Both models are production-ready and can be used for automated swap detection.
 
 ## Additional Resources
 
+- **Usage Guide**: `docs/ML_USAGE_GUIDE.md`
+- **API Reference**: `docs/ML_API_REFERENCE.md`
+- **Training Guide**: `docs/ML_TRAINING_GUIDE.md`
 - **Overfitting Analysis**: `ml_analysis/model_overfitting_analysis.json`
 - **Learning Curves**: `ml_analysis/learning_curves_data.json`
 - **Model Comparison Report**: `ml_analysis/model_comparison_report.md`
-- **Feature Extraction Code**: `swap_correction/ml_features_optimized.py`
-- **Training Script**: `train_ml_swap_detector.py`
