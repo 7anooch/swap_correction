@@ -121,10 +121,21 @@ def cross_validate_model(X_train_val, y_train_val, n_splits: int = 5):
         f1 = f1_score(y_val_fold, y_pred, zero_division=0)
         auc = roc_auc_score(y_val_fold, y_proba) if len(np.unique(y_val_fold)) > 1 else 0.0
         
+        # Calculate specificity
+        from sklearn.metrics import confusion_matrix
+        cm = confusion_matrix(y_val_fold, y_pred)
+        tn, fp, fn, tp = cm.ravel() if cm.size == 4 else (cm[0,0], cm[0,1] if cm.shape[1] > 1 else 0, 
+                                                          cm[1,0] if cm.shape[0] > 1 else 0, 
+                                                          cm[1,1] if cm.shape == (2,2) else 0)
+        sensitivity = recall  # Sensitivity = Recall
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else (1.0 if fp == 0 else 0.0)
+        
         cv_results.append({
             'fold': fold + 1,
             'precision': float(precision),
             'recall': float(recall),
+            'sensitivity': float(sensitivity),
+            'specificity': float(specificity),
             'f1': float(f1),
             'auc': float(auc)
         })

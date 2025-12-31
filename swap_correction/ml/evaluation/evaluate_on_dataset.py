@@ -72,7 +72,13 @@ def evaluate_model_on_dataset(data_dir: str,
         print(f"\nPerformance Metrics (mean ± std):")
         print(f"  Precision: {summary['mean_precision']:.4f} ± {summary['std_precision']:.4f}")
         print(f"  Recall: {summary['mean_recall']:.4f} ± {summary['std_recall']:.4f}")
+        print(f"  Sensitivity: {summary['mean_sensitivity']:.4f} ± {summary['std_sensitivity']:.4f}")
+        print(f"  Specificity: {summary['mean_specificity']:.4f} ± {summary['std_specificity']:.4f}")
         print(f"  F1-Score: {summary['mean_f1']:.4f} ± {summary['std_f1']:.4f}")
+        print(f"\nAdditional Metrics (mean ± std):")
+        print(f"  % Swaps Resolved: {summary['mean_pct_swaps_resolved']:.2f}% ± {summary['std_pct_swaps_resolved']:.2f}%")
+        print(f"  % Frames Clean (Pre): {summary['mean_pct_frames_clean_pre']:.2f}% ± {summary['std_pct_frames_clean_pre']:.2f}%")
+        print(f"  % Frames Clean (Post): {summary['mean_pct_frames_clean_post']:.2f}% ± {summary['std_pct_frames_clean_post']:.2f}%")
     
     # Save results
     dataset_name = os.path.basename(data_dir.rstrip('/'))
@@ -117,15 +123,25 @@ def create_evaluation_report(results: Dict, model_type: str, dataset_name: str, 
 |--------|------|---------|
 | Precision | {summary['mean_precision']:.4f} | {summary['std_precision']:.4f} |
 | Recall | {summary['mean_recall']:.4f} | {summary['std_recall']:.4f} |
+| Sensitivity | {summary['mean_sensitivity']:.4f} | {summary['std_sensitivity']:.4f} |
+| Specificity | {summary['mean_specificity']:.4f} | {summary['std_specificity']:.4f} |
 | F1-Score | {summary['mean_f1']:.4f} | {summary['std_f1']:.4f} |
+
+### Additional Metrics
+
+| Metric | Mean | Std Dev |
+|--------|------|---------|
+| % Swaps Resolved | {summary['mean_pct_swaps_resolved']:.2f}% | {summary['std_pct_swaps_resolved']:.2f}% |
+| % Frames Clean (Pre-correction) | {summary['mean_pct_frames_clean_pre']:.2f}% | {summary['std_pct_frames_clean_pre']:.2f}% |
+| % Frames Clean (Post-correction) | {summary['mean_pct_frames_clean_post']:.2f}% | {summary['std_pct_frames_clean_post']:.2f}% |
 
 ### Per-Trial Results
 
-| Trial | Precision | Recall | F1 | TP | FP | FN | TN | Frames | GT Swaps | Pred Swaps |
-|-------|-----------|--------|----|----|----|----|----|--------|----------|------------|
+| Trial | Precision | Recall | Sensitivity | Specificity | F1 | % Swaps Resolved | % Clean Pre | % Clean Post | TP | FP | FN | TN | Frames | GT Swaps | Pred Swaps |
+|-------|-----------|--------|-------------|-------------|----|------------------|-------------|--------------|----|----|----|----|--------|----------|------------|
 """
         for r in valid_results:
-            report += f"| {r['trial']} | {r['precision']:.4f} | {r['recall']:.4f} | {r['f1']:.4f} | {r['tp']} | {r['fp']} | {r['fn']} | {r['tn']} | {r['n_frames']} | {r['n_swapped_gt']} | {r['n_swapped_pred']} |\n"
+            report += f"| {r['trial']} | {r['precision']:.4f} | {r['recall']:.4f} | {r['sensitivity']:.4f} | {r['specificity']:.4f} | {r['f1']:.4f} | {r['pct_swaps_resolved']:.2f}% | {r['pct_frames_clean_pre']:.2f}% | {r['pct_frames_clean_post']:.2f}% | {r['tp']} | {r['fp']} | {r['fn']} | {r['tn']} | {r['n_frames']} | {r['n_swapped_gt']} | {r['n_swapped_pred']} |\n"
     
     # Failed trials
     failed = [r for r in trial_results if 'error' in r]

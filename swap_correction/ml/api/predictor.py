@@ -168,9 +168,13 @@ class SwapPredictor:
         # Auto-detect data file if not provided
         if data_file is None:
             if self.model_type == 'level1':
-                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
+                # Look for _level1.csv or _data_level1.csv
+                csv_files = [f for f in os.listdir(trial_dir) 
+                           if f.endswith('_level1.csv') or f.endswith('_data_level1.csv')]
             else:
-                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_data.csv')]
+                # Look for raw _data.csv (but not _data_level1.csv or _data_level2.csv)
+                csv_files = [f for f in os.listdir(trial_dir) 
+                           if f.endswith('_data.csv') and '_level' not in f]
             
             if not csv_files:
                 raise FileNotFoundError(f"No appropriate data file found in {trial_dir}")

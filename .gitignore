@@ -11,6 +11,9 @@ swap_correction/tests/test_data/
 #figures
 *.png
 error_analysis_output/
+stability_analysis/
+stability_analysis_v2/
+stability_analysis_v3/
 
 # Distribution / packaging
 .Python

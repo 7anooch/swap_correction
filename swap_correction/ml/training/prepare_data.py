@@ -54,7 +54,9 @@ def extract_labels_for_trial(trial_dir: str, use_raw_data: bool = False) -> tupl
     # Load data based on use_raw_data flag
     if use_raw_data:
         # Compare raw data vs level2
-        csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_data.csv')]
+        # Look for _data.csv but not _data_level1.csv or _data_level2.csv
+        csv_files = [f for f in os.listdir(trial_dir) 
+                    if f.endswith('_data.csv') and not '_level' in f]
         if not csv_files:
             return None, None, None
         source_file = csv_files[0]
@@ -62,14 +64,18 @@ def extract_labels_for_trial(trial_dir: str, use_raw_data: bool = False) -> tupl
         source_type = "raw"
     else:
         # Compare level1 vs level2
-        csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
+        # Look for _level1.csv or _data_level1.csv
+        csv_files = [f for f in os.listdir(trial_dir) 
+                    if f.endswith('_level1.csv') or f.endswith('_data_level1.csv')]
         if not csv_files:
             return None, None, None
         source_file = csv_files[0]
         source_data = loader.load_raw_data(trial_dir, source_file, px2mm=True)
         source_type = "level1"
     
-    csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level2.csv')]
+    # Look for level2 file
+    csv_files = [f for f in os.listdir(trial_dir) 
+                if f.endswith('_level2.csv') or f.endswith('_data_level2.csv')]
     if not csv_files:
         return None, None, None
     
@@ -175,7 +181,8 @@ def create_train_test_split(trial_names: list, train_ratio: float = 0.7,
     return split
 
 
-def main(use_raw_data: bool = False):
+def main(use_raw_data: bool = False, trial_dirs: list = None, 
+         test_data_dir: str = None, output_dir: str = 'ml_data'):
     """
     Main entry point.
     
@@ -184,15 +191,14 @@ def main(use_raw_data: bool = False):
     use_raw_data : bool
         If True, compare raw _data.csv vs level2.csv
         If False, compare level1.csv vs level2.csv (default)
+    trial_dirs : list of str, optional
+        Custom list of trial directories to use. If None, uses all trials in test_data_dir
+    test_data_dir : str, optional
+        Custom test data directory. If None, uses default from get_test_data_path()
+    output_dir : str
+        Output directory for prepared data (default: 'ml_data')
     """
-    test_data_dir = get_test_data_path()
-    
-    if not os.path.exists(test_data_dir):
-        print(f"Error: Test data directory not found: {test_data_dir}")
-        sys.exit(1)
-    
     # Create output directory
-    output_dir = 'ml_data'
     os.makedirs(output_dir, exist_ok=True)
     
     print("=" * 80)
@@ -202,12 +208,25 @@ def main(use_raw_data: bool = False):
         print("Using: raw _data.csv vs level2.csv (ground truth)")
     else:
         print("Using: level1.csv vs level2.csv (ground truth)")
-    print(f"Test data directory: {test_data_dir}\n")
     
-    # Get all trial directories
-    trial_dirs = [os.path.join(test_data_dir, d) for d in os.listdir(test_data_dir)
-                  if os.path.isdir(os.path.join(test_data_dir, d))]
-    trial_dirs.sort()
+    # Get trial directories
+    if trial_dirs is None:
+        # Get all trial directories from test_data_dir
+        if test_data_dir is None:
+            test_data_dir = get_test_data_path()
+        
+        if not os.path.exists(test_data_dir):
+            print(f"Error: Test data directory not found: {test_data_dir}")
+            sys.exit(1)
+        
+        print(f"Test data directory: {test_data_dir}\n")
+        trial_dirs = [os.path.join(test_data_dir, d) for d in os.listdir(test_data_dir)
+                     if os.path.isdir(os.path.join(test_data_dir, d))]
+        trial_dirs.sort()
+    else:
+        # Use provided trial directories (ensure they exist)
+        print(f"Using {len(trial_dirs)} custom trial directories\n")
+        trial_dirs = [str(d) for d in trial_dirs if os.path.exists(str(d)) and os.path.isdir(str(d))]
     
     print(f"Found {len(trial_dirs)} trials\n")
     
@@ -316,9 +335,31 @@ def main(use_raw_data: bool = False):
 
 if __name__ == '__main__':
     import argparse
+    import json
     parser = argparse.ArgumentParser(description='Prepare ML training data')
     parser.add_argument('--use-raw-data', action='store_true',
                        help='Use raw _data.csv instead of level1.csv for comparison with level2.csv')
+    parser.add_argument('--trial-dirs', type=str, default=None,
+                       help='JSON file containing list of trial directory paths, or comma-separated list')
+    parser.add_argument('--test-data-dir', type=str, default=None,
+                       help='Test data directory (default: auto-detect)')
+    parser.add_argument('--output-dir', type=str, default='ml_data',
+                       help='Output directory for prepared data (default: ml_data)')
     args = parser.parse_args()
-    main(use_raw_data=args.use_raw_data)
+    
+    # Parse trial directories
+    trial_dirs = None
+    if args.trial_dirs:
+        if args.trial_dirs.endswith('.json'):
+            # Load from JSON file
+            with open(args.trial_dirs, 'r') as f:
+                trial_dirs = json.load(f)
+                # Ensure they're strings (not Path objects)
+                trial_dirs = [str(d) for d in trial_dirs]
+        else:
+            # Comma-separated list
+            trial_dirs = [d.strip() for d in args.trial_dirs.split(',')]
+    
+    main(use_raw_data=args.use_raw_data, trial_dirs=trial_dirs,
+         test_data_dir=args.test_data_dir, output_dir=args.output_dir)
 

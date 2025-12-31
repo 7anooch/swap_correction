@@ -53,6 +53,8 @@ def train_model_subset(X_train_subset, y_train_subset, X_val, y_val,
 
 def evaluate_model_subset(model, X_val, y_val, X_test, y_test):
     """Evaluate model on validation and test sets."""
+    from sklearn.metrics import confusion_matrix
+    
     # Validation set
     y_val_pred = model.predict(X_val)
     y_val_proba = model.predict_proba(X_val)[:, 1]
@@ -61,6 +63,14 @@ def evaluate_model_subset(model, X_val, y_val, X_test, y_test):
     val_recall = recall_score(y_val, y_val_pred, zero_division=0)
     val_f1 = f1_score(y_val, y_val_pred, zero_division=0)
     val_auc = roc_auc_score(y_val, y_val_proba) if len(np.unique(y_val)) > 1 else 0.0
+    
+    # Calculate specificity for validation
+    cm_val = confusion_matrix(y_val, y_val_pred)
+    tn_val, fp_val, fn_val, tp_val = cm_val.ravel() if cm_val.size == 4 else (cm_val[0,0], cm_val[0,1] if cm_val.shape[1] > 1 else 0, 
+                                                                              cm_val[1,0] if cm_val.shape[0] > 1 else 0, 
+                                                                              cm_val[1,1] if cm_val.shape == (2,2) else 0)
+    val_sensitivity = val_recall  # Sensitivity = Recall
+    val_specificity = tn_val / (tn_val + fp_val) if (tn_val + fp_val) > 0 else (1.0 if fp_val == 0 else 0.0)
     
     # Test set
     y_test_pred = model.predict(X_test)
@@ -71,16 +81,28 @@ def evaluate_model_subset(model, X_val, y_val, X_test, y_test):
     test_f1 = f1_score(y_test, y_test_pred, zero_division=0)
     test_auc = roc_auc_score(y_test, y_test_proba) if len(np.unique(y_test)) > 1 else 0.0
     
+    # Calculate specificity for test
+    cm_test = confusion_matrix(y_test, y_test_pred)
+    tn_test, fp_test, fn_test, tp_test = cm_test.ravel() if cm_test.size == 4 else (cm_test[0,0], cm_test[0,1] if cm_test.shape[1] > 1 else 0, 
+                                                                                    cm_test[1,0] if cm_test.shape[0] > 1 else 0, 
+                                                                                    cm_test[1,1] if cm_test.shape == (2,2) else 0)
+    test_sensitivity = test_recall  # Sensitivity = Recall
+    test_specificity = tn_test / (tn_test + fp_test) if (tn_test + fp_test) > 0 else (1.0 if fp_test == 0 else 0.0)
+    
     return {
         'val': {
             'precision': float(val_precision),
             'recall': float(val_recall),
+            'sensitivity': float(val_sensitivity),
+            'specificity': float(val_specificity),
             'f1': float(val_f1),
             'auc': float(val_auc)
         },
         'test': {
             'precision': float(test_precision),
             'recall': float(test_recall),
+            'sensitivity': float(test_sensitivity),
+            'specificity': float(test_specificity),
             'f1': float(test_f1),
             'auc': float(test_auc)
         }

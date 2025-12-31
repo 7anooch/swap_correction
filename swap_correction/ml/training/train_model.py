@@ -30,7 +30,8 @@ def get_test_data_path():
     return os.path.join(project_root, 'swap_correction', 'tests', 'test_data')
 
 
-def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, use_raw_data: bool = False):
+def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, 
+                      use_raw_data: bool = False, trial_dirs: list = None):
     """
     Load training labels and extract features for all frames.
     
@@ -43,11 +44,13 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, 
     use_raw_data : bool
         If True, use raw _data.csv and training_labels_raw.csv
         If False, use level1.csv and training_labels.csv (default)
+    trial_dirs : list of str, optional
+        Custom list of trial directories. If None, uses all trials from labels file
     
     Returns:
     --------
     tuple
-        (features_df, labels_df, trial_names)
+        (features_df, labels_df, trial_names, split)
     """
     if test_data_dir is None:
         test_data_dir = get_test_data_path()
@@ -78,7 +81,18 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, 
     for i, trial_name in enumerate(unique_trials):
         print(f"[{i+1}/{len(unique_trials)}] Processing: {trial_name}", end=' ... ', flush=True)
         
-        trial_dir = os.path.join(test_data_dir, trial_name)
+        # Find trial directory - check custom list first, then default location
+        trial_dir = None
+        if trial_dirs is not None:
+            # Find matching directory in custom list
+            for td in trial_dirs:
+                if os.path.basename(td) == trial_name:
+                    trial_dir = td
+                    break
+        
+        if trial_dir is None:
+            trial_dir = os.path.join(test_data_dir, trial_name)
+        
         if not os.path.exists(trial_dir):
             print("SKIPPED (directory not found)")
             continue
@@ -86,13 +100,14 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, 
         try:
             # Load data based on use_raw_data flag
             if use_raw_data:
-                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_data.csv')]
+                csv_files = [f for f in os.listdir(trial_dir) 
+                           if f.endswith('_data.csv') and not f.endswith('_level1.csv') and not f.endswith('_level2.csv')]
                 if not csv_files:
                     print("SKIPPED (no raw _data.csv)")
                     continue
                 data_file = csv_files[0]
             else:
-                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
+                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv') or f.endswith('_data_level1.csv')]
                 if not csv_files:
                     print("SKIPPED (no level1 data)")
                     continue
@@ -283,9 +298,25 @@ def evaluate_model(model, X_train, y_train, X_val, y_val, X_test, y_test):
         # Confusion matrix
         cm = confusion_matrix(y, y_pred)
         
+        # Calculate specificity and sensitivity
+        tn, fp, fn, tp = cm.ravel() if cm.size == 4 else (cm[0,0], cm[0,1] if cm.shape[1] > 1 else 0, 
+                                                          cm[1,0] if cm.shape[0] > 1 else 0, 
+                                                          cm[1,1] if cm.shape == (2,2) else 0)
+        
+        # Sensitivity = Recall = TP / (TP + FN)
+        sensitivity = recall  # They are the same
+        
+        # Specificity = TN / (TN + FP)
+        if (tn + fp) > 0:
+            specificity = tn / (tn + fp)
+        else:
+            specificity = 1.0 if fp == 0 else 0.0
+        
         results[split_name] = {
             'precision': precision,
             'recall': recall,
+            'sensitivity': sensitivity,
+            'specificity': specificity,
             'f1': f1,
             'auc': auc,
             'confusion_matrix': cm,
@@ -297,6 +328,8 @@ def evaluate_model(model, X_train, y_train, X_val, y_val, X_test, y_test):
         print(f"\n{split_name.upper()} Set:")
         print(f"  Precision: {precision:.4f}")
         print(f"  Recall: {recall:.4f}")
+        print(f"  Sensitivity: {sensitivity:.4f}")
+        print(f"  Specificity: {specificity:.4f}")
         print(f"  F1-score: {f1:.4f}")
         print(f"  ROC-AUC: {auc:.4f}")
         print(f"  Confusion Matrix:")
@@ -320,6 +353,8 @@ def main():
                        help='Directory containing test data (default: auto-detect)')
     parser.add_argument('--use-raw-data', action='store_true',
                        help='Use raw _data.csv instead of level1.csv for training')
+    parser.add_argument('--trial-dirs', type=str, default=None,
+                       help='JSON file containing list of trial directory paths (optional)')
     args = parser.parse_args()
     
     # Create output directory
@@ -337,8 +372,19 @@ def main():
         print("Using level1.csv for feature extraction")
     print()
     
+    # Parse trial directories if provided
+    trial_dirs = None
+    if args.trial_dirs:
+        import json
+        if args.trial_dirs.endswith('.json'):
+            with open(args.trial_dirs, 'r') as f:
+                trial_dirs = json.load(f)
+        else:
+            trial_dirs = [d.strip() for d in args.trial_dirs.split(',')]
+    
     features_df, labels, trial_names, split = load_training_data(
-        args.ml_data_dir, test_data_dir, use_raw_data=args.use_raw_data
+        args.ml_data_dir, test_data_dir, use_raw_data=args.use_raw_data,
+        trial_dirs=trial_dirs
     )
     
     # Prepare train/val/test split
