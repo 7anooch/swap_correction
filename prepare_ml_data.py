@@ -2,8 +2,12 @@
 """
 Prepare machine learning training data from ground truth labels.
 
-Extracts frame-level and segment-level labels by comparing level1 (auto-corrected)
-vs level2 (manually corrected) data for all trials.
+Extracts frame-level and segment-level labels by comparing raw data vs level2 
+(manually corrected ground truth) data for all trials.
+
+Can be configured to use either:
+- raw _data.csv vs level2.csv (use_raw_data=True)
+- level1.csv vs level2.csv (use_raw_data=False, default)
 """
 
 import os
@@ -22,7 +26,7 @@ def get_test_data_path():
     return os.path.join(script_dir, 'swap_correction', 'tests', 'test_data')
 
 
-def extract_labels_for_trial(trial_dir: str) -> tuple:
+def extract_labels_for_trial(trial_dir: str, use_raw_data: bool = False) -> tuple:
     """
     Extract frame-level and segment-level labels for a single trial.
     
@@ -30,6 +34,9 @@ def extract_labels_for_trial(trial_dir: str) -> tuple:
     -----------
     trial_dir : str
         Directory containing trial data files
+    use_raw_data : bool
+        If True, compare raw _data.csv vs level2.csv
+        If False, compare level1.csv vs level2.csv (default)
         
     Returns:
     --------
@@ -41,13 +48,23 @@ def extract_labels_for_trial(trial_dir: str) -> tuple:
     """
     trial_name = os.path.basename(trial_dir)
     
-    # Load level1 and level2 data
-    csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
-    if not csv_files:
-        return None, None, None
-    
-    level1_file = csv_files[0]
-    level1_data = loader.load_raw_data(trial_dir, level1_file, px2mm=True)
+    # Load data based on use_raw_data flag
+    if use_raw_data:
+        # Compare raw data vs level2
+        csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_data.csv')]
+        if not csv_files:
+            return None, None, None
+        source_file = csv_files[0]
+        source_data = loader.load_raw_data(trial_dir, source_file, px2mm=True)
+        source_type = "raw"
+    else:
+        # Compare level1 vs level2
+        csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
+        if not csv_files:
+            return None, None, None
+        source_file = csv_files[0]
+        source_data = loader.load_raw_data(trial_dir, source_file, px2mm=True)
+        source_type = "level1"
     
     csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level2.csv')]
     if not csv_files:
@@ -57,10 +74,10 @@ def extract_labels_for_trial(trial_dir: str) -> tuple:
     level2_data = loader.load_raw_data(trial_dir, level2_file, px2mm=True)
     
     # Get swapped frames
-    swapped_frames = error_analysis.identify_swapped_frames(level1_data, level2_data)
+    swapped_frames = error_analysis.identify_swapped_frames(source_data, level2_data)
     
     # Create frame-level labels
-    n_frames = min(len(level1_data), len(level2_data))
+    n_frames = min(len(source_data), len(level2_data))
     frame_labels = pd.DataFrame({
         'trial': [trial_name] * n_frames,
         'frame_idx': np.arange(n_frames),
@@ -69,7 +86,7 @@ def extract_labels_for_trial(trial_dir: str) -> tuple:
     frame_labels.loc[swapped_frames, 'is_swapped'] = True
     
     # Get swap segments
-    swap_segments = error_analysis.get_swap_segments(level1_data, level2_data)
+    swap_segments = error_analysis.get_swap_segments(source_data, level2_data)
     
     # Create segment-level labels
     if len(swap_segments) > 0:
@@ -155,8 +172,16 @@ def create_train_test_split(trial_names: list, train_ratio: float = 0.7,
     return split
 
 
-def main():
-    """Main entry point."""
+def main(use_raw_data: bool = False):
+    """
+    Main entry point.
+    
+    Parameters:
+    -----------
+    use_raw_data : bool
+        If True, compare raw _data.csv vs level2.csv
+        If False, compare level1.csv vs level2.csv (default)
+    """
     test_data_dir = get_test_data_path()
     
     if not os.path.exists(test_data_dir):
@@ -170,6 +195,10 @@ def main():
     print("=" * 80)
     print("PREPARING ML TRAINING DATA")
     print("=" * 80)
+    if use_raw_data:
+        print("Using: raw _data.csv vs level2.csv (ground truth)")
+    else:
+        print("Using: level1.csv vs level2.csv (ground truth)")
     print(f"Test data directory: {test_data_dir}\n")
     
     # Get all trial directories
@@ -189,7 +218,7 @@ def main():
         print(f"[{i+1}/{len(trial_dirs)}] Processing: {trial_name}", end=' ... ', flush=True)
         
         try:
-            frame_labels, segment_labels, stats = extract_labels_for_trial(trial_dir)
+            frame_labels, segment_labels, stats = extract_labels_for_trial(trial_dir, use_raw_data=use_raw_data)
             
             if frame_labels is not None:
                 all_frame_labels.append(frame_labels)
@@ -197,7 +226,10 @@ def main():
                 all_stats.append(stats)
                 print(f"OK ({stats['swapped_frames']} swapped frames, {stats['num_segments']} segments)")
             else:
-                print("SKIPPED (missing level1 or level2 data)")
+                if use_raw_data:
+                    print("SKIPPED (missing raw _data.csv or level2.csv)")
+                else:
+                    print("SKIPPED (missing level1.csv or level2.csv)")
         except Exception as e:
             print(f"ERROR: {e}")
             continue
@@ -211,10 +243,11 @@ def main():
     segment_labels_df = pd.concat(all_segment_labels, ignore_index=True)
     stats_df = pd.DataFrame(all_stats)
     
-    # Save labels
-    frame_labels_file = os.path.join(output_dir, 'training_labels.csv')
-    segment_labels_file = os.path.join(output_dir, 'segment_labels.csv')
-    stats_file = os.path.join(output_dir, 'trial_statistics.csv')
+    # Save labels (with suffix if using raw data)
+    suffix = '_raw' if use_raw_data else ''
+    frame_labels_file = os.path.join(output_dir, f'training_labels{suffix}.csv')
+    segment_labels_file = os.path.join(output_dir, f'segment_labels{suffix}.csv')
+    stats_file = os.path.join(output_dir, f'trial_statistics{suffix}.csv')
     
     frame_labels_df.to_csv(frame_labels_file, index=False)
     segment_labels_df.to_csv(segment_labels_file, index=False)
@@ -279,5 +312,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description='Prepare ML training data')
+    parser.add_argument('--use-raw-data', action='store_true',
+                       help='Use raw _data.csv instead of level1.csv for comparison with level2.csv')
+    args = parser.parse_args()
+    main(use_raw_data=args.use_raw_data)
 

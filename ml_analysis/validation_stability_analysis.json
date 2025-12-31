@@ -1,0 +1,58 @@
+{
+  "representativeness": {
+    "level1": {
+      "f1_gap": 0.0006549517712739483,
+      "precision_gap": 0.00581590148676292,
+      "recall_gap": 0.0044102196196149634,
+      "auc_gap": 0.0001484585820143991,
+      "representativeness": "excellent",
+      "val_f1": 0.9901401141670991,
+      "test_f1": 0.9894851623958252,
+      "val_precision": 0.9973863042341872,
+      "test_precision": 0.9915704027474243,
+      "val_recall": 0.9829984544049459,
+      "test_recall": 0.9874086740245609
+    },
+    "raw": {
+      "f1_gap": 0.009246109645531297,
+      "precision_gap": 0.004172424486605819,
+      "recall_gap": 0.014423439617659128,
+      "auc_gap": 0.0010460900123919759,
+      "representativeness": "good",
+      "val_f1": 0.9836894470722557,
+      "test_f1": 0.9744433374267244,
+      "val_precision": 0.976205891874393,
+      "test_precision": 0.9720334673877872,
+      "val_recall": 0.9912886259040106,
+      "test_recall": 0.9768651862863514
+    }
+  },
+  "split_analysis": {
+    "level1": {
+      "train_pos_rate": 0.13166666666666665,
+      "val_pos_rate": 0.07188888888888889,
+      "test_pos_rate": 0.14295555555555556,
+      "pos_rate_std": 0.031182781643981687,
+      "class_balance_quality": "fair",
+      "train_ratio": 0.68,
+      "val_ratio": 0.12,
+      "test_ratio": 0.2,
+      "total_samples": 225000
+    },
+    "raw": {
+      "train_pos_rate": 0.5063725490196078,
+      "val_pos_rate": 0.45066666666666666,
+      "test_pos_rate": 0.47835555555555553,
+      "pos_rate_std": 0.02274196273017423,
+      "class_balance_quality": "fair",
+      "train_ratio": 0.68,
+      "val_ratio": 0.12,
+      "test_ratio": 0.2,
+      "total_samples": 225000
+    }
+  },
+  "cross_validation": {
+    "level1": null,
+    "raw": null
+  }
+}

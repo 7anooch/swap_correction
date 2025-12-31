@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import pickle
+import time
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -17,6 +18,7 @@ from sklearn.metrics import (precision_score, recall_score, f1_score,
                             confusion_matrix, roc_auc_score, roc_curve)
 import xgboost as xgb
 from swap_correction import pivr_loader, ml_features
+from swap_correction import ml_features_optimized
 
 
 def get_test_data_path():
@@ -25,9 +27,19 @@ def get_test_data_path():
     return os.path.join(script_dir, 'swap_correction', 'tests', 'test_data')
 
 
-def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None):
+def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, use_raw_data: bool = False):
     """
     Load training labels and extract features for all frames.
+    
+    Parameters:
+    -----------
+    ml_data_dir : str
+        Directory containing ML data files
+    test_data_dir : str
+        Directory containing test data
+    use_raw_data : bool
+        If True, use raw _data.csv and training_labels_raw.csv
+        If False, use level1.csv and training_labels.csv (default)
     
     Returns:
     --------
@@ -37,8 +49,9 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None):
     if test_data_dir is None:
         test_data_dir = get_test_data_path()
     
-    # Load labels
-    labels_file = os.path.join(ml_data_dir, 'training_labels.csv')
+    # Load labels (with suffix if using raw data)
+    suffix = '_raw' if use_raw_data else ''
+    labels_file = os.path.join(ml_data_dir, f'training_labels{suffix}.csv')
     if not os.path.exists(labels_file):
         raise FileNotFoundError(f"Labels file not found: {labels_file}")
     
@@ -51,11 +64,13 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None):
     
     # Extract features for all trials
     print("Extracting features for all trials...")
+    print("Note: This may take 1-2 hours for all 25 trials. Progress will be shown below.\n")
     all_features = []
     all_labels = []
     trial_names_list = []
     
     unique_trials = labels_df['trial'].unique()
+    total_start_time = time.time()
     
     for i, trial_name in enumerate(unique_trials):
         print(f"[{i+1}/{len(unique_trials)}] Processing: {trial_name}", end=' ... ', flush=True)
@@ -66,22 +81,36 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None):
             continue
         
         try:
-            # Load raw data (we'll use level1 as input since that's what we're trying to improve)
-            csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
-            if not csv_files:
-                print("SKIPPED (no level1 data)")
-                continue
+            # Load data based on use_raw_data flag
+            if use_raw_data:
+                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_data.csv')]
+                if not csv_files:
+                    print("SKIPPED (no raw _data.csv)")
+                    continue
+                data_file = csv_files[0]
+            else:
+                csv_files = [f for f in os.listdir(trial_dir) if f.endswith('_level1.csv')]
+                if not csv_files:
+                    print("SKIPPED (no level1 data)")
+                    continue
+                data_file = csv_files[0]
             
-            level1_file = csv_files[0]
-            trial_data = pivr_loader.load_raw_data(trial_dir, level1_file, px2mm=True)
+            trial_data = pivr_loader.load_raw_data(trial_dir, data_file, px2mm=True)
             fps = pivr_loader.get_all_settings(trial_dir)['Framerate']
             
             # Get labels for this trial
             trial_labels = labels_df[labels_df['trial'] == trial_name].copy()
             trial_labels = trial_labels.sort_values('frame_idx')
             
-            # Extract features
-            trial_features = ml_features.extract_all_frame_features(trial_data, fps=fps)
+            # Extract features using optimized version (8-12x faster)
+            if len(trial_data) > 1000:
+                print(f"\n  Extracting features for {len(trial_data)} frames...", flush=True)
+            
+            # Use optimized version for speed with Gaussian filtering
+            # Filtering smooths noisy position data before computing speeds/angles
+            # Optimal sigma=4.6 found through grid search (F1=0.9944)
+            trial_features = ml_features_optimized.extract_all_frame_features_optimized(
+                trial_data, fps=fps, apply_filtering=True, filter_sigma=4.6)
             
             # Align features and labels
             min_len = min(len(trial_features), len(trial_labels))
@@ -96,7 +125,12 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None):
             trial_names_list.extend([trial_name] * min_len)
             
             n_swapped = trial_labels['is_swapped'].sum()
-            print(f"OK ({len(trial_features)} frames, {n_swapped} swapped)")
+            elapsed = time.time() - total_start_time
+            remaining_trials = len(unique_trials) - (i + 1)
+            avg_time_per_trial = elapsed / (i + 1)
+            estimated_remaining = avg_time_per_trial * remaining_trials
+            print(f"OK ({len(trial_features)} frames, {n_swapped} swapped) - "
+                  f"Elapsed: {elapsed/60:.1f}min, Est. remaining: {estimated_remaining/60:.1f}min")
         except Exception as e:
             print(f"ERROR: {e}")
             continue
@@ -192,7 +226,21 @@ def train_xgboost_model(X_train, y_train, X_val, y_val,
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dval = xgb.DMatrix(X_val, label=y_val)
     
-    # Train model
+    # Train model using sklearn wrapper (more convenient for evaluation)
+    # In XGBoost 2.0+, early_stopping_rounds must be in constructor
+    sklearn_model = xgb.XGBClassifier(
+        **{k: v for k, v in params.items() if k != 'n_estimators'},  # Remove n_estimators, use n_estimators param instead
+        n_estimators=params['n_estimators'],
+        early_stopping_rounds=20
+    )
+    
+    sklearn_model.fit(
+        X_train, y_train,
+        eval_set=[(X_val, y_val)],
+        verbose=10
+    )
+    
+    # Also train native XGBoost model for compatibility
     evals = [(dtrain, 'train'), (dval, 'val')]
     model = xgb.train(
         params,
@@ -202,13 +250,6 @@ def train_xgboost_model(X_train, y_train, X_val, y_val,
         early_stopping_rounds=20,
         verbose_eval=10
     )
-    
-    # Convert to sklearn wrapper for easier use
-    sklearn_model = xgb.XGBClassifier(**params)
-    sklearn_model.fit(X_train, y_train, 
-                     eval_set=[(X_val, y_val)],
-                     early_stopping_rounds=20,
-                     verbose=False)
     
     return sklearn_model, model
 
@@ -274,6 +315,8 @@ def main():
                        help='Directory to save trained models')
     parser.add_argument('--test-data-dir', type=str, default=None,
                        help='Directory containing test data (default: auto-detect)')
+    parser.add_argument('--use-raw-data', action='store_true',
+                       help='Use raw _data.csv instead of level1.csv for training')
     args = parser.parse_args()
     
     # Create output directory
@@ -285,8 +328,14 @@ def main():
     
     # Load training data
     test_data_dir = args.test_data_dir or get_test_data_path()
+    if args.use_raw_data:
+        print("Using raw _data.csv for feature extraction")
+    else:
+        print("Using level1.csv for feature extraction")
+    print()
+    
     features_df, labels, trial_names, split = load_training_data(
-        args.ml_data_dir, test_data_dir
+        args.ml_data_dir, test_data_dir, use_raw_data=args.use_raw_data
     )
     
     # Prepare train/val/test split
@@ -344,11 +393,26 @@ def main():
     
     # Save evaluation results
     results_file = os.path.join(args.output_dir, 'training_results.json')
-    # Convert numpy arrays to lists for JSON serialization
+    # Convert numpy arrays and numpy types to native Python types for JSON serialization
+    def convert_to_serializable(obj):
+        """Convert numpy types to native Python types for JSON serialization."""
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_to_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [convert_to_serializable(item) for item in obj]
+        else:
+            return obj
+    
     results_serializable = {}
     for split_name, metrics in results.items():
         results_serializable[split_name] = {
-            k: (v.tolist() if isinstance(v, np.ndarray) else v)
+            k: convert_to_serializable(v)
             for k, v in metrics.items()
         }
     

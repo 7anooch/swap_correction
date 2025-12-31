@@ -3,16 +3,23 @@ Machine learning feature extraction for swap detection.
 
 This module provides functions to extract frame-level and segment-level features
 from tracking data for training ML models to detect head-tail swaps.
+
+Note: Raw tracking data is often noisy. Consider applying Gaussian filtering
+(sigma=4-5) to position data before feature extraction if performance is poor.
+See extract_frame_features() and extract_all_frame_features() for optional
+filtering parameter.
 """
 
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
 from swap_correction import metrics, utils, tracking_correction
+from scipy import ndimage
 
 
 def extract_frame_features(data: pd.DataFrame, frame_idx: int, 
-                          fps: int = 30, window_sizes: List[int] = [5, 10, 20, 50]) -> Dict:
+                          fps: int = 30, window_sizes: List[int] = [5, 10, 20, 50],
+                          apply_filtering: bool = False, filter_sigma: float = 4.5) -> Dict:
     """
     Extract comprehensive features for a single frame.
     
@@ -26,6 +33,11 @@ def extract_frame_features(data: pd.DataFrame, frame_idx: int,
         Frame rate
     window_sizes : list
         Window sizes for temporal context features
+    apply_filtering : bool
+        If True, apply Gaussian filter to position data before computing speeds/angles.
+        Recommended if raw data is noisy (default: False).
+    filter_sigma : float
+        Standard deviation for Gaussian filter (default: 4.5). Typical range: 4-5.
         
     Returns:
     --------
@@ -37,6 +49,26 @@ def extract_frame_features(data: pd.DataFrame, frame_idx: int,
     
     if frame_idx < 0 or frame_idx >= n_frames:
         return features
+    
+    # Apply filtering if requested (smooths position data before computing derivatives)
+    if apply_filtering:
+        # Create a copy to avoid modifying original data
+        data = data.copy()
+        
+        # Filter position columns with Gaussian filter
+        position_cols = ['xhead', 'yhead', 'xtail', 'ytail', 'xmid', 'ymid', 'xctr', 'yctr']
+        for col in position_cols:
+            if col in data.columns:
+                # Apply 1D Gaussian filter along the time axis
+                valid_mask = ~pd.isna(data[col])
+                if valid_mask.sum() > 0:
+                    # Only filter valid values, preserve NaNs
+                    filtered_values = data[col].copy()
+                    filtered_values[valid_mask] = ndimage.gaussian_filter1d(
+                        data[col][valid_mask].values, 
+                        sigma=filter_sigma
+                    )
+                    data[col] = filtered_values
     
     # Get frame data
     frame = data.iloc[frame_idx]
@@ -404,7 +436,8 @@ def extract_frame_features(data: pd.DataFrame, frame_idx: int,
     return features
 
 
-def extract_all_frame_features(trial_data: pd.DataFrame, fps: int = 30) -> pd.DataFrame:
+def extract_all_frame_features(trial_data: pd.DataFrame, fps: int = 30,
+                              apply_filtering: bool = False, filter_sigma: float = 4.5) -> pd.DataFrame:
     """
     Extract features for all frames in a trial.
     
@@ -414,6 +447,11 @@ def extract_all_frame_features(trial_data: pd.DataFrame, fps: int = 30) -> pd.Da
         Tracking data for a trial
     fps : int
         Frame rate
+    apply_filtering : bool
+        If True, apply Gaussian filter to position data before computing speeds/angles.
+        Recommended if raw data is noisy (default: False).
+    filter_sigma : float
+        Standard deviation for Gaussian filter (default: 4.5). Typical range: 4-5.
         
     Returns:
     --------
@@ -424,7 +462,9 @@ def extract_all_frame_features(trial_data: pd.DataFrame, fps: int = 30) -> pd.Da
     all_features = []
     
     for i in range(n_frames):
-        features = extract_frame_features(trial_data, i, fps=fps)
+        features = extract_frame_features(trial_data, i, fps=fps, 
+                                         apply_filtering=apply_filtering, 
+                                         filter_sigma=filter_sigma)
         all_features.append(features)
     
     return pd.DataFrame(all_features)

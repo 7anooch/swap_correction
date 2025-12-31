@@ -1,0 +1,189 @@
+[
+  {
+    "sigma": 4.0,
+    "precision": 0.9850377911460744,
+    "recall": 0.9926939219648686,
+    "f1": 0.9888510374729018,
+    "auc": 0.9994981409041076,
+    "confusion_matrix": {
+      "tn": 38470,
+      "fp": 97,
+      "fn": 47,
+      "tp": 6386
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6483,
+    "time_seconds": 14.68118929862976
+  },
+  {
+    "sigma": 4.2,
+    "precision": 0.9883936861652739,
+    "recall": 0.9928493704337013,
+    "f1": 0.9906165180302443,
+    "auc": 0.9997636269937913,
+    "confusion_matrix": {
+      "tn": 38492,
+      "fp": 75,
+      "fn": 46,
+      "tp": 6387
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6462,
+    "time_seconds": 15.196403980255127
+  },
+  {
+    "sigma": 4.4,
+    "precision": 0.9892108508014796,
+    "recall": 0.9976682729675113,
+    "f1": 0.9934215617986224,
+    "auc": 0.9998853171031272,
+    "confusion_matrix": {
+      "tn": 38497,
+      "fp": 70,
+      "fn": 15,
+      "tp": 6418
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6488,
+    "time_seconds": 14.82215929031372
+  },
+  {
+    "sigma": 4.6,
+    "precision": 0.9911969111969112,
+    "recall": 0.9976682729675113,
+    "f1": 0.9944220638363805,
+    "auc": 0.9998981505598328,
+    "confusion_matrix": {
+      "tn": 38510,
+      "fp": 57,
+      "fn": 15,
+      "tp": 6418
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6475,
+    "time_seconds": 14.447425842285156
+  },
+  {
+    "sigma": 4.8,
+    "precision": 0.9881483761736186,
+    "recall": 0.9979791699051764,
+    "f1": 0.9930394431554525,
+    "auc": 0.9999249178292993,
+    "confusion_matrix": {
+      "tn": 38490,
+      "fp": 77,
+      "fn": 13,
+      "tp": 6420
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6497,
+    "time_seconds": 14.126182079315186
+  },
+  {
+    "sigma": 5.0,
+    "precision": 0.9887553912507702,
+    "recall": 0.9978237214363439,
+    "f1": 0.9932688588007736,
+    "auc": 0.99989361209493,
+    "confusion_matrix": {
+      "tn": 38494,
+      "fp": 73,
+      "fn": 14,
+      "tp": 6419
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6492,
+    "time_seconds": 14.138173818588257
+  },
+  {
+    "sigma": 5.2,
+    "precision": 0.9875077112893276,
+    "recall": 0.9953365459350225,
+    "f1": 0.9914066733761709,
+    "auc": 0.9998090136581231,
+    "confusion_matrix": {
+      "tn": 38486,
+      "fp": 81,
+      "fn": 30,
+      "tp": 6403
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6484,
+    "time_seconds": 14.306485891342163
+  },
+  {
+    "sigma": 5.4,
+    "precision": 0.9906185403084751,
+    "recall": 0.9684439608269858,
+    "f1": 0.9794057538122937,
+    "auc": 0.9997432945904146,
+    "confusion_matrix": {
+      "tn": 38508,
+      "fp": 59,
+      "fn": 203,
+      "tp": 6230
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6289,
+    "time_seconds": 14.623870849609375
+  },
+  {
+    "sigma": 5.6,
+    "precision": 0.9917829457364341,
+    "recall": 0.994403855122027,
+    "f1": 0.9930916711945975,
+    "auc": 0.9998685578339748,
+    "confusion_matrix": {
+      "tn": 38514,
+      "fp": 53,
+      "fn": 36,
+      "tp": 6397
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6450,
+    "time_seconds": 14.330129146575928
+  },
+  {
+    "sigma": 5.8,
+    "precision": 0.9897721989772199,
+    "recall": 0.9928493704337013,
+    "f1": 0.9913083967096074,
+    "auc": 0.9997219767033181,
+    "confusion_matrix": {
+      "tn": 38501,
+      "fp": 66,
+      "fn": 46,
+      "tp": 6387
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6453,
+    "time_seconds": 14.800851821899414
+  },
+  {
+    "sigma": 6.0,
+    "precision": 0.9930476960388036,
+    "recall": 0.9547644955697187,
+    "f1": 0.9735298779521319,
+    "auc": 0.9997164225251334,
+    "confusion_matrix": {
+      "tn": 38524,
+      "fp": 43,
+      "fn": 291,
+      "tp": 6142
+    },
+    "n_test_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6185,
+    "time_seconds": 14.890112161636353
+  }
+]

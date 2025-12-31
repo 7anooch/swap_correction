@@ -1,0 +1,59 @@
+{
+  "train": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "auc": 1.0,
+    "confusion_matrix": [
+      [
+        132855,
+        0
+      ],
+      [
+        0,
+        20145
+      ]
+    ],
+    "n_samples": 153000,
+    "n_positive": 20145,
+    "n_predicted_positive": 20145
+  },
+  "val": {
+    "precision": 0.9984317825405122,
+    "recall": 0.9840288511076765,
+    "f1": 0.9911779968863519,
+    "auc": 0.9998543159935442,
+    "confusion_matrix": [
+      [
+        25056,
+        3
+      ],
+      [
+        31,
+        1910
+      ]
+    ],
+    "n_samples": 27000,
+    "n_positive": 1941,
+    "n_predicted_positive": 1913
+  },
+  "test": {
+    "precision": 0.9913272417531361,
+    "recall": 0.9950256489973573,
+    "f1": 0.9931730023273856,
+    "auc": 0.9998002390239373,
+    "confusion_matrix": [
+      [
+        38511,
+        56
+      ],
+      [
+        32,
+        6401
+      ]
+    ],
+    "n_samples": 45000,
+    "n_positive": 6433,
+    "n_predicted_positive": 6457
+  }
+}
