@@ -278,7 +278,7 @@ print(available)  # Shows which models are available
 
 **Error**: `ValueError: Feature count mismatch`
 
-**Solution**: Ensure you're using the same feature extraction pipeline. The models expect 56 features extracted with `ml_features_optimized.extract_all_frame_features_optimized()`.
+**Solution**: Ensure you're using the same feature extraction pipeline. The models expect 56 features extracted with `swap_correction.ml.features.extract_all_frame_features_optimized()`.
 
 #### 3. Missing Data Files
 
@@ -319,8 +319,9 @@ print(data.columns)  # Should include: xhead, yhead, xtail, ytail, etc.
 
 3. Check feature extraction:
 ```python
-from swap_correction import ml_features_optimized
-features = ml_features_optimized.extract_all_frame_features_optimized(data, fps=30)
+from swap_correction.ml.features import extract_all_frame_features_optimized
+from swap_correction.ml.features import extract_all_frame_features_optimized
+features = extract_all_frame_features_optimized(data, fps=30)
 print(features.shape)  # Should be (n_frames, 56)
 ```
 
@@ -475,7 +476,7 @@ print(f"Disagreements: {len(disagreements)} frames")
 
 ## Performance Tips
 
-1. **Use optimized feature extraction**: Always use `ml_features_optimized.extract_all_frame_features_optimized()` (400x faster)
+1. **Use optimized feature extraction**: Always use `swap_correction.ml.features.extract_all_frame_features_optimized()` (400x faster)
 
 2. **Batch processing**: Use `BatchProcessor` for multiple trials to avoid reloading models
 

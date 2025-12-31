@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from typing import Literal, Optional, Tuple, List
 from swap_correction.ml.api.model_loader import load_model
-from swap_correction import ml_features_optimized, pivr_loader
+from swap_correction.ml.features import extract_all_frame_features_optimized
+from swap_correction import pivr_loader
 
 
 class SwapPredictor:
@@ -65,7 +66,7 @@ class SwapPredictor:
             Binary predictions (0=no swap, 1=swap) or probabilities if return_probabilities=True
         """
         # Extract features
-        features = ml_features_optimized.extract_all_frame_features_optimized(
+        features = extract_all_frame_features_optimized(
             trial_data, fps=fps, apply_filtering=True, filter_sigma=self.filter_sigma
         )
         

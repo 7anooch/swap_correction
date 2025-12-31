@@ -228,7 +228,7 @@ If performance is significantly lower, check:
 
 ### 3. Feature Engineering
 
-- **Use optimized extraction**: Always use `ml_features_optimized`
+- **Use optimized extraction**: Always use `swap_correction.ml.features.extract_all_frame_features_optimized`
 - **Gaussian filtering**: Apply filtering (sigma=4.6) for noisy data
 - **Feature consistency**: Ensure same features used in training and inference
 
@@ -330,7 +330,7 @@ python -m swap_correction.ml.evaluation.compare
 
 ### Custom Feature Engineering
 
-To add new features, modify `swap_correction/ml_features_optimized.py`:
+To add new features, modify `swap_correction/ml/features/features.py`:
 
 1. Add feature calculation in `extract_all_frame_features_optimized()`
 2. Ensure feature count matches (update if needed)

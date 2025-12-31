@@ -17,8 +17,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (precision_score, recall_score, f1_score, 
                             confusion_matrix, roc_auc_score, roc_curve)
 import xgboost as xgb
-from swap_correction import pivr_loader, ml_features
-from swap_correction import ml_features_optimized
+from swap_correction import pivr_loader
+from swap_correction.ml.features import extract_all_frame_features_optimized
 
 
 def get_test_data_path():
@@ -112,7 +112,7 @@ def load_training_data(ml_data_dir: str = 'ml_data', test_data_dir: str = None, 
             # Use optimized version for speed with Gaussian filtering
             # Filtering smooths noisy position data before computing speeds/angles
             # Optimal sigma=4.6 found through grid search (F1=0.9944)
-            trial_features = ml_features_optimized.extract_all_frame_features_optimized(
+            trial_features = extract_all_frame_features_optimized(
                 trial_data, fps=fps, apply_filtering=True, filter_sigma=4.6)
             
             # Align features and labels

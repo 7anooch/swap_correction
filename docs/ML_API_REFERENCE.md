@@ -485,7 +485,7 @@ except ValueError as e:
 
 ## Performance Considerations
 
-1. **Feature Extraction**: Use optimized version (`ml_features_optimized`) - 400x faster
+1. **Feature Extraction**: Use optimized version (`swap_correction.ml.features.extract_all_frame_features_optimized`) - 400x faster
 2. **Batch Processing**: Reuse `BatchProcessor` instance to avoid reloading models
 3. **Memory**: For very large datasets, process in chunks
 4. **Filtering**: Default sigma (4.6) is optimal; only change if necessary

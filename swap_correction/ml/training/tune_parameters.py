@@ -17,7 +17,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 import xgboost as xgb
 from swap_correction import pivr_loader
-from swap_correction import ml_features_optimized
+from swap_correction.ml.features import extract_all_frame_features_optimized
 
 
 def get_test_data_path():
@@ -79,7 +79,7 @@ def load_training_data(test_data_dir: str, sigma: float):
             trial_labels = trial_labels.sort_values('frame_idx')
             
             # Extract features with specified sigma
-            trial_features = ml_features_optimized.extract_all_frame_features_optimized(
+            trial_features = extract_all_frame_features_optimized(
                 trial_data, fps=fps, apply_filtering=True, filter_sigma=sigma)
             
             # Align features and labels

@@ -1,8 +1,9 @@
 """
-Optimized machine learning feature extraction for swap detection.
+Machine learning feature extraction for swap detection.
 
-This module provides optimized versions of feature extraction functions that
-pre-compute expensive operations and use vectorized NumPy operations for speed.
+This module provides feature extraction functions that pre-compute expensive
+operations and use vectorized NumPy operations for speed (400x faster than
+naive implementations).
 """
 
 import numpy as np
