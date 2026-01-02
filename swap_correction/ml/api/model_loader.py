@@ -66,7 +66,8 @@ def get_model_dir(model_type: str) -> Path:
 
 
 def load_model(model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
-               base_dir: Optional[str] = None) -> Tuple[xgb.XGBClassifier, StandardScaler, SimpleImputer, list]:
+               base_dir: Optional[str] = None,
+               model_dir: Optional[str] = None) -> Tuple[xgb.XGBClassifier, StandardScaler, SimpleImputer, list]:
     """
     Load a trained swap detection model and its preprocessors.
     
@@ -100,13 +101,16 @@ def load_model(model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
     >>> model, scaler, imputer, feature_names = load_model('level1')
     >>> print(f"Loaded model with {len(feature_names)} features")
     """
-    if base_dir is None:
-        base_dir = os.getcwd()
-    
-    model_dir = Path(base_dir) / get_model_dir(model_type)
+    # If model_dir is provided, use it directly; otherwise use default location
+    if model_dir is not None:
+        model_dir_path = Path(model_dir)
+    else:
+        if base_dir is None:
+            base_dir = os.getcwd()
+        model_dir_path = Path(base_dir) / get_model_dir(model_type)
     
     # Load model
-    model_path = model_dir / MODEL_FILES['model']
+    model_path = model_dir_path / MODEL_FILES['model']
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
     
@@ -114,7 +118,7 @@ def load_model(model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
         model = pickle.load(f)
     
     # Load scaler
-    scaler_path = model_dir / MODEL_FILES['scaler']
+    scaler_path = model_dir_path / MODEL_FILES['scaler']
     if not scaler_path.exists():
         raise FileNotFoundError(f"Scaler file not found: {scaler_path}")
     
@@ -122,7 +126,7 @@ def load_model(model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
         scaler = pickle.load(f)
     
     # Load imputer
-    imputer_path = model_dir / MODEL_FILES['imputer']
+    imputer_path = model_dir_path / MODEL_FILES['imputer']
     if not imputer_path.exists():
         raise FileNotFoundError(f"Imputer file not found: {imputer_path}")
     
@@ -130,7 +134,7 @@ def load_model(model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
         imputer = pickle.load(f)
     
     # Load feature names
-    feature_names_path = model_dir / MODEL_FILES['feature_names']
+    feature_names_path = model_dir_path / MODEL_FILES['feature_names']
     if not feature_names_path.exists():
         raise FileNotFoundError(f"Feature names file not found: {feature_names_path}")
     

@@ -67,6 +67,23 @@ Examples:
     eval_parser.add_argument('--output-dir', type=str, default='ml_analysis/evaluations',
                             help='Output directory (default: ml_analysis/evaluations)')
     
+    # Threshold optimization
+    threshold_parser = subparsers.add_parser('optimize-threshold', 
+                                            help='Find optimal classification threshold')
+    threshold_parser.add_argument('--model-type', type=str, choices=['level1', 'raw', 'raw_data'],
+                                 default='level1', help='Model type (default: level1)')
+    threshold_parser.add_argument('--metric', type=str, 
+                                 choices=['f1', 'pct_clean_post', 'precision', 'recall', 'pct_swaps_resolved'],
+                                 default='pct_clean_post', help='Metric to maximize (default: pct_clean_post)')
+    threshold_parser.add_argument('--split', type=str, choices=['train', 'val', 'test'],
+                                 default='val', help='Data split to use (default: val)')
+    threshold_parser.add_argument('--n-thresholds', type=int, default=100,
+                                 help='Number of thresholds to test (default: 100)')
+    threshold_parser.add_argument('--output-dir', type=str, default=None,
+                                 help='Directory to save results')
+    threshold_parser.add_argument('--ml-data-dir', type=str, default='ml_data',
+                                 help='Directory containing ML training data')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -113,6 +130,43 @@ Examples:
             ground_truth_level=args.ground_truth,
             output_dir=args.output_dir
         )
+    
+    elif args.command == 'optimize-threshold':
+        # Import and run threshold optimization
+        from swap_correction.ml.evaluation.optimize_threshold import main as threshold_main
+        # Temporarily modify sys.argv to pass arguments
+        import sys
+        original_argv = sys.argv
+        try:
+            sys.argv = ['optimize_threshold'] + [
+                '--model-type', args.model_type,
+                '--metric', args.metric,
+                '--split', args.split,
+                '--n-thresholds', str(args.n_thresholds),
+            ]
+            if args.output_dir:
+                sys.argv.extend(['--output-dir', args.output_dir])
+            if args.ml_data_dir:
+                sys.argv.extend(['--ml-data-dir', args.ml_data_dir])
+            threshold_main()
+        finally:
+            sys.argv = original_argv
+    
+    elif args.command == 'optimize-threshold':
+        from swap_correction.ml.evaluation.optimize_threshold import main as threshold_main
+        # Convert argparse args to function call
+        import sys
+        sys.argv = ['optimize_threshold'] + [
+            '--model-type', args.model_type,
+            '--metric', args.metric,
+            '--split', args.split,
+            '--n-thresholds', str(args.n_thresholds),
+        ]
+        if args.output_dir:
+            sys.argv.extend(['--output-dir', args.output_dir])
+        if args.ml_data_dir:
+            sys.argv.extend(['--ml-data-dir', args.ml_data_dir])
+        threshold_main()
 
 
 if __name__ == '__main__':

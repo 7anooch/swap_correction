@@ -199,18 +199,27 @@ class BatchProcessor:
                 n_swapped_pred = int(predictions.sum())
                 
                 # Percentage of swaps resolved = TP / (TP + FN) = sensitivity = recall
-                # This is the percentage of ground truth swaps that were correctly detected
+                # This is the percentage of ground truth swaps that were correctly detected.
+                # NOTE: This metric ONLY considers swaps (TP and FN). False positives (FP) do NOT
+                # affect this metric. A model can have 99% swaps resolved but still have a lower
+                # % Frames Clean Post if it makes false positive predictions.
                 if (tp + fn) > 0:
                     pct_swaps_resolved = (tp / (tp + fn)) * 100.0
                 else:
                     pct_swaps_resolved = 100.0 if fn == 0 else 0.0
                 
                 # Percentage of frames clean pre-correction = (frames not swapped in GT) / total frames
-                # This is the percentage of frames that are NOT swapped in the raw/level1 data
+                # This is the percentage of frames that are NOT swapped in the raw/level1 data.
+                # This describes the input data quality, not model performance.
                 pct_frames_clean_pre = ((total_frames - n_swapped_gt) / total_frames) * 100.0 if total_frames > 0 else 0.0
                 
                 # Percentage of frames clean post-correction = (TP + TN) / total frames
-                # This is the accuracy: percentage of frames correctly classified
+                # This is the accuracy: percentage of frames correctly classified (both swapped and not swapped).
+                # NOTE: This metric considers ALL frames (TP, TN, FP, FN). False positives (FP) reduce
+                # this metric even when swaps are well-detected. The difference between % Swaps Resolved
+                # and % Frames Clean Post reflects false positives and the trial composition.
+                # For example: 99% swaps resolved but 98% clean post means the model detected most swaps
+                # but also made some false positive predictions that reduced overall accuracy.
                 pct_frames_clean_post = ((tp + tn) / total_frames) * 100.0 if total_frames > 0 else 0.0
                 
                 # Special case: if no swaps in ground truth and no predictions, perfect match

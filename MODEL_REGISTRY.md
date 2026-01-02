@@ -91,11 +91,16 @@ Actual No Swap  38513     54
 ```python
 from swap_correction.ml.api import SwapPredictor
 
-# Simple usage
+# Simple usage with recommended threshold
 predictor = SwapPredictor(model_type='level1')
-predictions = predictor.predict(trial_data, fps=30)
-segments = predictor.predict_segments(trial_data, fps=30)
+predictions = predictor.predict(trial_data, fps=30, threshold=0.63)  # Recommended threshold
+segments = predictor.predict_segments(trial_data, fps=30, threshold=0.63)
 ```
+
+### Recommended Threshold
+- **Threshold**: 0.63 (optimized for % Frames Clean Post)
+- **Performance**: Achieves ~97.65% ± 0.76% frames clean post on average
+- **Rationale**: Based on comprehensive threshold optimization across multiple stability analysis iterations
 
 ### Use Case
 **Best for**: Detecting remaining swaps after initial auto-correction
@@ -182,11 +187,16 @@ Actual No Swap  22869    605
 ```python
 from swap_correction.ml.api import SwapPredictor
 
-# Simple usage
+# Simple usage (default threshold 0.5 is optimal)
 predictor = SwapPredictor(model_type='raw')
-predictions = predictor.predict(trial_data, fps=30)
+predictions = predictor.predict(trial_data, fps=30)  # threshold=0.5 is default and optimal
 segments = predictor.predict_segments(trial_data, fps=30)
 ```
+
+### Recommended Threshold
+- **Threshold**: 0.5 (default, optimal for this model)
+- **Performance**: Achieves ~96% frames clean post on average
+- **Rationale**: Default threshold provides optimal performance for raw data models
 
 ### Use Case
 **Best for**: Detecting swaps directly from raw tracking data

@@ -44,7 +44,7 @@ fps = pivr_loader.get_all_settings(trial_dir)['Framerate']
 # Create predictor
 predictor = SwapPredictor(model_type='level1')
 
-# Get predictions
+# Get predictions (uses recommended threshold automatically)
 predictions = predictor.predict(trial_data, fps=fps)
 segments = predictor.predict_segments(trial_data, fps=fps)
 
@@ -68,6 +68,8 @@ print(f"Detected {len(segments)} swap segments")
 - Precision: 99.16%
 - Recall: 98.74%
 
+**Recommended Threshold:** 0.63 (optimized for % Frames Clean Post)
+
 ### Raw Data Model
 
 **Use when:**
@@ -80,6 +82,8 @@ print(f"Detected {len(segments)} swap segments")
 - F1-Score: 97.44%
 - Precision: 97.20%
 - Recall: 97.69%
+
+**Recommended Threshold:** 0.5 (default, optimal for this model)
 
 ### Decision Tree
 
@@ -110,8 +114,14 @@ predictor = SwapPredictor(model_type='raw')
 #### Binary Predictions
 
 ```python
-# Get binary predictions (0 = no swap, 1 = swap)
-predictions = predictor.predict(trial_data, fps=30)
+# Level1 model: Use recommended threshold 0.63
+predictor = SwapPredictor(model_type='level1')
+predictions = predictor.predict(trial_data, fps=30, threshold=0.63)
+print(f"Swapped frames: {predictions.sum()} / {len(predictions)}")
+
+# Raw model: Uses default threshold 0.5 (optimal)
+predictor = SwapPredictor(model_type='raw')
+predictions = predictor.predict(trial_data, fps=30)  # threshold=0.5 is default
 print(f"Swapped frames: {predictions.sum()} / {len(predictions)}")
 ```
 
@@ -237,11 +247,17 @@ summary = results['summary']
 print(f"Mean F1-Score: {summary['mean_f1']:.4f}")
 print(f"Mean Precision: {summary['mean_precision']:.4f}")
 print(f"Mean Recall: {summary['mean_recall']:.4f}")
+print(f"Mean % Swaps Resolved: {summary['mean_pct_swaps_resolved']:.2f}%")
+print(f"Mean % Frames Clean Post: {summary['mean_pct_frames_clean_post']:.2f}%")
 
 # Per-trial results
 for trial_result in results['trial_results']:
     if 'error' not in trial_result:
-        print(f"{trial_result['trial']}: F1={trial_result['f1']:.4f}")
+        print(f"{trial_result['trial']}: F1={trial_result['f1']:.4f}, "
+              f"% Resolved={trial_result['pct_swaps_resolved']:.2f}%, "
+              f"% Clean Post={trial_result['pct_frames_clean_post']:.2f}%")
+
+# Note: See docs/METRIC_CALCULATIONS.md for detailed explanations of these metrics
 ```
 
 ### Using the Evaluation Script
@@ -491,6 +507,7 @@ print(f"Disagreements: {len(disagreements)} frames")
 - **Training Guide**: See `docs/ML_TRAINING_GUIDE.md` for training new models
 - **API Reference**: See `docs/ML_API_REFERENCE.md` for detailed API documentation
 - **Model Registry**: See `MODEL_REGISTRY.md` for model performance and metadata
+- **Metric Calculations**: See `docs/METRIC_CALCULATIONS.md` for detailed explanations of all performance metrics
 
 ---
 

@@ -1,0 +1,206 @@
+{
+  "model_type": "raw",
+  "n_iterations": 6,
+  "optimal_threshold": {
+    "mean": 0.5280471380471381,
+    "std": 0.053815879803683825,
+    "min": 0.4851515151515151,
+    "max": 0.6336363636363637,
+    "median": 0.5049494949494949
+  },
+  "pct_frames_clean_post": {
+    "mean": 95.57623456790122,
+    "std": 1.9426247854394063,
+    "min": 92.80833333333334,
+    "max": 97.62222222222222,
+    "median": 96.41574074074074
+  },
+  "precision": {
+    "mean": 0.9614275391486768,
+    "std": 0.018800865613225918,
+    "min": 0.9256563037570741,
+    "max": 0.9792505921172493
+  },
+  "recall": {
+    "mean": 0.9342366478140024,
+    "std": 0.032742709371115876,
+    "min": 0.8891182602297347,
+    "max": 0.9693814176879761
+  },
+  "f1": {
+    "mean": 0.9475470368199974,
+    "std": 0.025418797628879792,
+    "min": 0.9075887018907589,
+    "max": 0.973310607162901
+  },
+  "pct_swaps_resolved": {
+    "mean": 93.42366478140026,
+    "std": 3.2742709371115897,
+    "min": 88.91182602297347,
+    "max": 96.93814176879762
+  },
+  "per_iteration": [
+    {
+      "optimal_threshold": 0.5544444444444444,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 7,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.5544444444444444,
+        "precision": 0.9772717786033309,
+        "recall": 0.9693814176879761,
+        "f1": 0.973310607162901,
+        "sensitivity": 0.9693814176879761,
+        "specificity": 0.981757571696596,
+        "pct_swaps_resolved": 96.93814176879762,
+        "pct_frames_clean_pre": 55.27407407407408,
+        "pct_frames_clean_post": 97.62222222222222,
+        "tp": 46825,
+        "fp": 1089,
+        "fn": 1479,
+        "tn": 58607,
+        "n_frames": 108000,
+        "n_swapped_gt": 48304,
+        "n_swapped_pred": 47914
+      },
+      "n_samples": 108000,
+      "n_positive": 48304
+    },
+    {
+      "optimal_threshold": 0.4851515151515151,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 8,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.4851515151515151,
+        "precision": 0.9256563037570741,
+        "recall": 0.8902129087944759,
+        "f1": 0.9075887018907589,
+        "sensitivity": 0.8902129087944759,
+        "specificity": 0.9550171966451457,
+        "pct_swaps_resolved": 89.02129087944759,
+        "pct_frames_clean_pre": 61.38148148148148,
+        "pct_frames_clean_post": 92.99907407407407,
+        "tp": 37129,
+        "fp": 2982,
+        "fn": 4579,
+        "tn": 63310,
+        "n_frames": 108000,
+        "n_swapped_gt": 41708,
+        "n_swapped_pred": 40111
+      },
+      "n_samples": 108000,
+      "n_positive": 41708
+    },
+    {
+      "optimal_threshold": 0.6336363636363637,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 9,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.6336363636363637,
+        "precision": 0.9792505921172493,
+        "recall": 0.9602397919685571,
+        "f1": 0.9696520205259782,
+        "sensitivity": 0.9602397919685571,
+        "specificity": 0.9822119639727193,
+        "pct_swaps_resolved": 96.02397919685572,
+        "pct_frames_clean_pre": 53.354629629629635,
+        "pct_frames_clean_post": 97.1962962962963,
+        "tp": 48374,
+        "fp": 1025,
+        "fn": 2003,
+        "tn": 56598,
+        "n_frames": 108000,
+        "n_swapped_gt": 50377,
+        "n_swapped_pred": 49399
+      },
+      "n_samples": 108000,
+      "n_positive": 50377
+    },
+    {
+      "optimal_threshold": 0.5247474747474747,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 10,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.5247474747474747,
+        "precision": 0.9708668929863099,
+        "recall": 0.9394134569968655,
+        "f1": 0.95488122906369,
+        "sensitivity": 0.9394134569968655,
+        "specificity": 0.9786232945850021,
+        "pct_swaps_resolved": 93.94134569968655,
+        "pct_frames_clean_pre": 56.87222222222223,
+        "pct_frames_clean_post": 96.17129629629629,
+        "tp": 43756,
+        "fp": 1313,
+        "fn": 2822,
+        "tn": 60109,
+        "n_frames": 108000,
+        "n_swapped_gt": 46578,
+        "n_swapped_pred": 45069
+      },
+      "n_samples": 108000,
+      "n_positive": 46578
+    },
+    {
+      "optimal_threshold": 0.4851515151515151,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 11,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.4851515151515151,
+        "precision": 0.9666070744477079,
+        "recall": 0.9570540512064061,
+        "f1": 0.9618068423671922,
+        "sensitivity": 0.9570540512064061,
+        "specificity": 0.9740853910314642,
+        "pct_swaps_resolved": 95.7054051206406,
+        "pct_frames_clean_pre": 56.06018518518518,
+        "pct_frames_clean_post": 96.66018518518518,
+        "tp": 45417,
+        "fp": 1569,
+        "fn": 2038,
+        "tn": 58976,
+        "n_frames": 108000,
+        "n_swapped_gt": 47455,
+        "n_swapped_pred": 46986
+      },
+      "n_samples": 108000,
+      "n_positive": 47455
+    },
+    {
+      "optimal_threshold": 0.4851515151515151,
+      "metric_optimized": "pct_clean_post",
+      "split_used": "val",
+      "iteration": 12,
+      "model_type": "raw",
+      "best_metrics": {
+        "threshold": 0.4851515151515151,
+        "precision": 0.9489125929803895,
+        "recall": 0.8891182602297347,
+        "f1": 0.918042819909464,
+        "sensitivity": 0.8891182602297347,
+        "specificity": 0.9603548092223313,
+        "pct_swaps_resolved": 88.91182602297347,
+        "pct_frames_clean_pre": 54.69814814814815,
+        "pct_frames_clean_post": 92.80833333333334,
+        "tp": 43501,
+        "fp": 2342,
+        "fn": 5425,
+        "tn": 56732,
+        "n_frames": 108000,
+        "n_swapped_gt": 48926,
+        "n_swapped_pred": 45843
+      },
+      "n_samples": 108000,
+      "n_positive": 48926
+    }
+  ]
+}

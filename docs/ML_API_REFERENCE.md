@@ -142,7 +142,8 @@ Predict swapped frames for a trial.
 predictions = predictor.predict(
     trial_data,  # pd.DataFrame: Tracking data
     fps=30,  # int: Frame rate
-    return_probabilities=False  # bool: Return probabilities instead of binary
+    return_probabilities=False,  # bool: Return probabilities instead of binary
+    threshold=0.5  # float: Classification threshold (default: 0.5)
 )
 ```
 
@@ -150,14 +151,23 @@ predictions = predictor.predict(
 - `trial_data` (pd.DataFrame): Tracking data (level1.csv or raw _data.csv)
 - `fps` (int): Frame rate (default: 30)
 - `return_probabilities` (bool): If True, return probabilities instead of binary predictions
+- `threshold` (float): Classification threshold for binary predictions (default: 0.5)
+  - **Level1 models**: Recommended threshold is **0.63** (optimized for % Frames Clean Post)
+  - **Raw models**: Recommended threshold is **0.5** (default, optimal for this model)
 
 **Returns:**
 - `np.ndarray`: Binary predictions (0=no swap, 1=swap) or probabilities if `return_probabilities=True`
 
 **Example:**
 ```python
-predictions = predictor.predict(trial_data, fps=30)
+# Level1 model with recommended threshold
+predictor = SwapPredictor(model_type='level1')
+predictions = predictor.predict(trial_data, fps=30, threshold=0.63)
 print(f"Swapped frames: {predictions.sum()}")
+
+# Raw model (uses default 0.5 threshold)
+predictor = SwapPredictor(model_type='raw')
+predictions = predictor.predict(trial_data, fps=30)  # threshold=0.5 is default
 ```
 
 ---

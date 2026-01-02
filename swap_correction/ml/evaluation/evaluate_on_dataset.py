@@ -21,7 +21,8 @@ from swap_correction import pivr_loader, error_analysis
 def evaluate_model_on_dataset(data_dir: str,
                               model_type: Literal['level1', 'raw', 'raw_data'] = 'level1',
                               ground_truth_level: str = 'level2',
-                              output_dir: Optional[str] = None) -> Dict:
+                              output_dir: Optional[str] = None,
+                              model_dir: Optional[str] = None) -> Dict:
     """
     Evaluate a trained model on a dataset with ground truth.
     
@@ -35,6 +36,8 @@ def evaluate_model_on_dataset(data_dir: str,
         Ground truth level to compare against ('level1' or 'level2')
     output_dir : str, optional
         Directory to save evaluation results (default: ml_analysis/evaluations/)
+    model_dir : str, optional
+        Directory containing the trained model files. If None, loads from default location.
         
     Returns:
     --------
@@ -50,10 +53,38 @@ def evaluate_model_on_dataset(data_dir: str,
     print("=" * 80)
     print(f"Data directory: {data_dir}")
     print(f"Ground truth level: {ground_truth_level}")
+    if model_dir:
+        print(f"Model directory: {model_dir}")
     print()
     
-    # Initialize batch processor
-    processor = BatchProcessor(model_type=model_type)
+    # Initialize batch processor with custom model directory if provided
+    if model_dir:
+        # Create a custom BatchProcessor that loads from the specified model directory
+        from swap_correction.ml.api.predictor import SwapPredictor
+        from swap_correction.ml.api.model_loader import load_model
+        
+        # Load model from specified directory
+        model, scaler, imputer, feature_names = load_model(
+            model_type=model_type,
+            model_dir=model_dir
+        )
+        
+        # Create custom predictor
+        predictor = SwapPredictor.__new__(SwapPredictor)
+        predictor.model_type = model_type
+        predictor.filter_sigma = 4.6
+        predictor.model = model
+        predictor.scaler = scaler
+        predictor.imputer = imputer
+        predictor.feature_names = feature_names
+        
+        # Create batch processor with custom predictor
+        processor = BatchProcessor.__new__(BatchProcessor)
+        processor.predictor = predictor
+        processor.model_type = model_type
+    else:
+        # Use default model
+        processor = BatchProcessor(model_type=model_type)
     
     # Evaluate
     results = processor.evaluate_on_dataset(
@@ -149,6 +180,9 @@ def create_evaluation_report(results: Dict, model_type: str, dataset_name: str, 
         report += f"\n### Failed Trials\n\n"
         for r in failed:
             report += f"- **{r['trial']}**: {r['error']}\n"
+    
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     
     report_file = os.path.join(output_dir, f'evaluation_report_{model_type}_{dataset_name}.md')
     with open(report_file, 'w') as f:

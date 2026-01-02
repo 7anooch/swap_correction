@@ -1,0 +1,27 @@
+{
+  "optimal_threshold": 0.43565656565656563,
+  "metric_optimized": "pct_clean_post",
+  "split_used": "val",
+  "iteration": 11,
+  "model_type": "level1",
+  "best_metrics": {
+    "threshold": 0.43565656565656563,
+    "precision": 0.9675466889658743,
+    "recall": 0.9549223816073885,
+    "f1": 0.9611930851695083,
+    "sensitivity": 0.9549223816073885,
+    "specificity": 0.9901277935921506,
+    "pct_swaps_resolved": 95.49223816073885,
+    "pct_frames_clean_pre": 76.43981481481481,
+    "pct_frames_clean_post": 98.18333333333334,
+    "tp": 24298,
+    "fp": 815,
+    "fn": 1147,
+    "tn": 81740,
+    "n_frames": 108000,
+    "n_swapped_gt": 25445,
+    "n_swapped_pred": 25113
+  },
+  "n_samples": 108000,
+  "n_positive": 25445
+}

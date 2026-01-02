@@ -1,0 +1,8 @@
+{
+  "optimal_threshold": 0.5531206727027893,
+  "metric_optimized": "pct_clean_post",
+  "split_used": "val",
+  "iteration": 8,
+  "model_type": "raw",
+  "best_metrics": {
+    "threshold": 

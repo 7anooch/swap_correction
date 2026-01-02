@@ -47,7 +47,7 @@ class SwapPredictor:
         self.model, self.scaler, self.imputer, self.feature_names = load_model(model_type)
         
     def predict(self, trial_data: pd.DataFrame, fps: int = 30,
-                return_probabilities: bool = False) -> np.ndarray:
+                return_probabilities: bool = False, threshold: float = 0.5) -> np.ndarray:
         """
         Predict swapped frames for a trial.
         
@@ -59,6 +59,9 @@ class SwapPredictor:
             Frame rate (default: 30)
         return_probabilities : bool
             If True, return probabilities instead of binary predictions
+        threshold : float
+            Classification threshold (default: 0.5). Only used if return_probabilities=False.
+            Use threshold optimization to find the best value for your metric.
             
         Returns:
         --------
@@ -78,7 +81,9 @@ class SwapPredictor:
         if return_probabilities:
             return self.model.predict_proba(X)[:, 1]
         else:
-            return self.model.predict(X)
+            # Use custom threshold instead of default 0.5
+            probabilities = self.model.predict_proba(X)[:, 1]
+            return (probabilities >= threshold).astype(int)
     
     def predict_proba(self, trial_data: pd.DataFrame, fps: int = 30) -> np.ndarray:
         """

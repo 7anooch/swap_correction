@@ -164,7 +164,8 @@ def run_single_iteration(iteration_id: int, trial_split: Dict[str, List[str]],
                 eval_data_dir,
                 model_type=model_type,
                 ground_truth_level='level2',
-                output_dir=os.path.join(model_output_dir, 'evaluation')
+                output_dir=os.path.join(model_output_dir, 'evaluation'),
+                model_dir=model_output_dir  # Use the model from this iteration
             )
             
             # Save evaluation results
