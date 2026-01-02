@@ -1,19 +1,29 @@
 """
-Machine learning feature extraction for swap detection - Version 4.
+Machine learning feature extraction for swap detection - Version 3.
 
-This version includes Phase 1 and Phase 2 improvements:
-Phase 1 (Remove underperformers):
-- Removed collapsed_keypoints (0-0.22% importance)
-- Removed head_path_curvature (raw, less informative than ratio)
-- Removed tail_path_curvature (0.08-0.18% importance)
-- Kept head_tail_curvature_ratio (0.22-0.37% - encodes more information)
-- Removed window size 5 features (consistently low importance)
+DEPRECATED: This is a legacy version kept for reference only.
+The current default implementation is features_v4 (~36 features).
 
-Phase 2 (High-value additions):
-- Added acceleration features (head_acceleration, tail_acceleration, relative_acceleration)
-- Added body length normalization to distance features (normalized by mean body length, same names)
+This version improved calculations and added new features:
+- 3-point central difference for angular velocity
+- Added tail path curvature and head/tail curvature ratio
+- Added collapsed_keypoints binary flag
+- Removed standard deviation features for window sizes 5 and 10
+- Removed head_velocity_x/y and tail_velocity_x/y
 
-Total features: ~40-42 (from 39 in v3)
+Total: 39 features
+
+Note: This version showed overfitting issues (performance declined with more data in some cases).
+
+This version includes improvements and further feature reduction:
+- Improved angular velocity calculation (3-point central difference)
+- Added tail path curvature
+- Added head/tail curvature ratio
+- Added collapsed keypoints binary feature
+- Removed std features for small windows (5, 10)
+- Removed velocity component features (x, y components)
+
+Total features: ~39 (down from 46 in v2)
 
 This module provides feature extraction functions that pre-compute expensive
 operations and use vectorized NumPy operations for speed (400x faster than
@@ -30,21 +40,18 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
                                         apply_filtering: bool = False, 
                                         filter_sigma: float = 4.5) -> pd.DataFrame:
     """
-    Optimized version: Extract features for all frames in a trial (V4 - Phase 1 & 2 improvements).
+    Optimized version: Extract features for all frames in a trial (V3 - improved calculations).
     
     Pre-computes expensive operations once and uses vectorized operations.
     Expected speedup: 8-12x faster than original implementation.
     
-    V4 Changes:
-    Phase 1:
-    - Removed collapsed_keypoints (underperformed)
-    - Removed head_path_curvature and tail_path_curvature (raw curvatures)
-    - Kept head_tail_curvature_ratio (more informative)
-    - Removed window size 5 features
-    
-    Phase 2:
-    - Added acceleration features (head, tail, relative)
-    - Added body length normalization to distance features
+    V3 Changes:
+    - Improved angular velocity calculation (3-point central difference)
+    - Added tail path curvature
+    - Added head/tail curvature ratio
+    - Added collapsed keypoints binary feature
+    - Removed std features for small windows (5, 10)
+    - Removed velocity component features (x, y components)
     
     Parameters:
     -----------
@@ -60,7 +67,7 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
     Returns:
     --------
     pd.DataFrame
-        DataFrame with one row per frame, columns are features (~40-42 features)
+        DataFrame with one row per frame, columns are features (~39 features)
     """
     from scipy import ndimage
     
@@ -97,43 +104,8 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
     hspd_all = metrics.get_speed_from_df(trial_data, 'head', fps=fps, npoints=2)
     tspd_all = metrics.get_speed_from_df(trial_data, 'tail', fps=fps, npoints=2)
     
-    # V4 Phase 2: Pre-compute accelerations (rate of speed change)
-    head_acceleration = np.full(n_frames, np.nan)
-    tail_acceleration = np.full(n_frames, np.nan)
-    # Acceleration = derivative of speed (difference in speed * fps to get units of mm/s²)
-    head_acceleration[1:] = np.diff(hspd_all) * fps
-    tail_acceleration[1:] = np.diff(tspd_all) * fps
-    # Set NaN where speed was NaN
-    head_acceleration[np.isnan(hspd_all)] = np.nan
-    tail_acceleration[np.isnan(tspd_all)] = np.nan
-    
-    # Relative acceleration
-    relative_acceleration = np.full(n_frames, np.nan)
-    for i in range(n_frames):
-        if not (np.isnan(head_acceleration[i]) or np.isnan(tail_acceleration[i])):
-            relative_acceleration[i] = head_acceleration[i] - tail_acceleration[i]
-    
     # Pre-compute cross-sign (called once instead of 1x per frame)
     cross_sign_all = metrics.get_ht_cross_sign(trial_data)
-    
-    # Pre-compute distances for body length normalization
-    head_tail_distances = np.full(n_frames, np.nan)
-    head_mid_distances = np.full(n_frames, np.nan)
-    tail_mid_distances = np.full(n_frames, np.nan)
-    
-    for i in range(n_frames):
-        if not (np.isnan(xhead[i]) or np.isnan(xtail[i])):
-            head_tail_distances[i] = np.sqrt((xhead[i] - xtail[i])**2 + (yhead[i] - ytail[i])**2)
-        if not (np.isnan(xhead[i]) or np.isnan(xmid[i])):
-            head_mid_distances[i] = np.sqrt((xhead[i] - xmid[i])**2 + (yhead[i] - ymid[i])**2)
-        if not (np.isnan(xtail[i]) or np.isnan(xmid[i])):
-            tail_mid_distances[i] = np.sqrt((xtail[i] - xmid[i])**2 + (ytail[i] - ymid[i])**2)
-    
-    # V4 Phase 2: Calculate mean body length for normalization
-    # Use head_tail_distance as proxy for body length
-    mean_body_length = np.nanmean(head_tail_distances)
-    if mean_body_length < 0.01:  # Safety check: avoid division by very small numbers
-        mean_body_length = 1.0
     
     # Pre-compute cumulative distances (O(n) instead of O(n²))
     cumulative_head_dist = np.zeros(n_frames)
@@ -223,8 +195,7 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
                 angle_change = np.arccos(cos_angle) * 180 / np.pi
                 tail_angular_velocity[i] = angle_change * fps
     
-    # Pre-compute path curvature (head and tail) - needed for curvature ratio
-    # V4: We don't include these as features, but need them for the ratio
+    # Pre-compute path curvature (head and tail)
     head_path_curvature = np.full(n_frames, np.nan)
     tail_path_curvature = np.full(n_frames, np.nan)
     
@@ -257,10 +228,12 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
                 angle_change = np.arccos(cos_angle) * 180 / np.pi
                 tail_path_curvature[i] = angle_change
     
-    # V4 Phase 1: REMOVED collapsed_keypoints (underperformed: 0-0.22% importance)
+    # V3: Pre-compute collapsed keypoints (binary feature)
+    collapsed_keypoints = tracking_correction.detect_collapsed_keypoints(trial_data, tolerance=0.05, debug=False)
+    collapsed_keypoints = collapsed_keypoints.astype(int)  # Convert boolean to int (0/1)
     
-    # V4 Phase 1: Window sizes - removed window size 5 (consistently low importance)
-    window_sizes = [10, 20, 50]
+    # Window sizes for temporal context
+    window_sizes = [5, 10, 20, 50]
     
     # Pre-compute temporal context statistics using sliding windows
     # Use pandas rolling for efficiency
@@ -278,7 +251,7 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
             window=window_size, min_periods=window_size//2, center=False
         ).mean().values
         
-        # Only compute std for larger windows (20, 50)
+        # V3: Only compute std for larger windows (20, 50)
         if window_size >= 20:
             temporal_stats[f'head_speed_std_{window_size}'] = hspd_series.rolling(
                 window=window_size, min_periods=window_size//2, center=False
@@ -292,7 +265,7 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
             window=window_size, min_periods=window_size//2, center=False
         ).mean().values
         
-        # Only compute std for larger windows (20, 50)
+        # V3: Only compute std for larger windows (20, 50)
         if window_size >= 20:
             temporal_stats[f'alignment_angle_std_{window_size}'] = alignment_series.rolling(
                 window=window_size, min_periods=window_size//2, center=False
@@ -308,19 +281,19 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
         # These were: head_x, head_y, tail_x, tail_y, mid_x, mid_y, centroid_x, centroid_y
         # Rationale: Distance features capture spatial relationships; raw positions may be trial-specific
         
-        # V4 Phase 2: Distances normalized by body length (keep same names)
-        if not np.isnan(head_tail_distances[i]):
-            features['head_tail_distance'] = head_tail_distances[i] / mean_body_length
+        # Distances
+        if not (np.isnan(xhead[i]) or np.isnan(xtail[i])):
+            features['head_tail_distance'] = np.sqrt((xhead[i] - xtail[i])**2 + (yhead[i] - ytail[i])**2)
         else:
             features['head_tail_distance'] = np.nan
         
-        if not np.isnan(head_mid_distances[i]):
-            features['head_mid_distance'] = head_mid_distances[i] / mean_body_length
+        if not (np.isnan(xhead[i]) or np.isnan(xmid[i])):
+            features['head_mid_distance'] = np.sqrt((xhead[i] - xmid[i])**2 + (yhead[i] - ymid[i])**2)
         else:
             features['head_mid_distance'] = np.nan
         
-        if not np.isnan(tail_mid_distances[i]):
-            features['tail_mid_distance'] = tail_mid_distances[i] / mean_body_length
+        if not (np.isnan(xtail[i]) or np.isnan(xmid[i])):
+            features['tail_mid_distance'] = np.sqrt((xtail[i] - xmid[i])**2 + (ytail[i] - ymid[i])**2)
         else:
             features['tail_mid_distance'] = np.nan
         
@@ -336,11 +309,6 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
                 features['speed_ratio'] = np.nan
         else:
             features['speed_ratio'] = np.nan
-        
-        # V4 Phase 2: Acceleration features
-        features['head_acceleration'] = head_acceleration[i] if not np.isnan(head_acceleration[i]) else np.nan
-        features['tail_acceleration'] = tail_acceleration[i] if not np.isnan(tail_acceleration[i]) else np.nan
-        features['relative_acceleration'] = relative_acceleration[i] if not np.isnan(relative_acceleration[i]) else np.nan
         
         # V3: REMOVED velocity component features
         # These were: head_velocity_x, head_velocity_y, tail_velocity_x, tail_velocity_y
@@ -381,25 +349,27 @@ def extract_all_frame_features_optimized(trial_data: pd.DataFrame, fps: int = 30
         
         # Geometric features
         features['cross_sign'] = cross_sign_all[i] if i < len(cross_sign_all) and not np.isnan(cross_sign_all[i]) else np.nan
+        features['head_path_curvature'] = head_path_curvature[i] if not np.isnan(head_path_curvature[i]) else np.nan
         
-        # V4 Phase 1: REMOVED head_path_curvature and tail_path_curvature as features
-        # (but keep calculation for curvature ratio)
+        # V3: Added tail path curvature
+        features['tail_path_curvature'] = tail_path_curvature[i] if not np.isnan(tail_path_curvature[i]) else np.nan
         
-        # V4 Phase 1: Keep curvature ratio (more informative than raw curvatures)
-        if not (np.isnan(head_path_curvature[i]) or np.isnan(tail_path_curvature[i])):
-            tail_curv_eps = np.maximum(tail_path_curvature[i], 0.001)
-            features['head_tail_curvature_ratio'] = head_path_curvature[i] / tail_curv_eps
+        # V3: Added curvature ratio (with epsilon to handle division by zero)
+        if not (np.isnan(features['head_path_curvature']) or np.isnan(features['tail_path_curvature'])):
+            tail_curv_eps = np.maximum(features['tail_path_curvature'], 0.001)
+            features['head_tail_curvature_ratio'] = features['head_path_curvature'] / tail_curv_eps
         else:
             features['head_tail_curvature_ratio'] = np.nan
         
-        # V4 Phase 1: REMOVED collapsed_keypoints (underperformed)
+        # V3: Added collapsed keypoints binary feature
+        features['collapsed_keypoints'] = collapsed_keypoints[i]
         
         # Cumulative distances (from pre-computed)
         features['cumulative_head_distance'] = cumulative_head_dist[i]
         features['cumulative_tail_distance'] = cumulative_tail_dist[i]
         
         # Temporal context features (from pre-computed)
-        # Only include std features for larger windows (20, 50)
+        # V3: Only include std features for larger windows (20, 50)
         for window_size in window_sizes:
             features[f'head_speed_mean_{window_size}'] = temporal_stats[f'head_speed_mean_{window_size}'][i] if not np.isnan(temporal_stats[f'head_speed_mean_{window_size}'][i]) else np.nan
             features[f'tail_speed_mean_{window_size}'] = temporal_stats[f'tail_speed_mean_{window_size}'][i] if not np.isnan(temporal_stats[f'tail_speed_mean_{window_size}'][i]) else np.nan

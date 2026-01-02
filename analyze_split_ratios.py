@@ -846,21 +846,13 @@ def main():
                     split_data = json.load(f)
                 trial_dirs = split_data.get('train', []) + split_data.get('val', []) + split_data.get('test', [])
             
-            # Patch features
+            # Patch features (for legacy versions only; default is now v4)
             original_extract = None
             if feature_version == 'v4':
-                import swap_correction.ml.features.features_v4 as features_module_to_use
-                import swap_correction.ml.features as features_module
-                import swap_correction.ml.training.train_model as train_model_module
-                import sys
-                import importlib
-                
-                original_extract = features_module.extract_all_frame_features_optimized
-                features_module.extract_all_frame_features_optimized = features_module_to_use.extract_all_frame_features_optimized
-                sys.modules['swap_correction.ml.features'].extract_all_frame_features_optimized = features_module_to_use.extract_all_frame_features_optimized
-                importlib.reload(train_model_module)
+                # V4 is now the default, no patching needed
+                pass
             elif feature_version == 'v3':
-                import swap_correction.ml.features.features_v3 as features_module_to_use
+                import swap_correction.ml.features.legacy.features_v3 as features_module_to_use
                 import swap_correction.ml.features as features_module
                 import swap_correction.ml.training.train_model as train_model_module
                 import sys
@@ -871,7 +863,7 @@ def main():
                 sys.modules['swap_correction.ml.features'].extract_all_frame_features_optimized = features_module_to_use.extract_all_frame_features_optimized
                 importlib.reload(train_model_module)
             elif feature_version == 'v2':
-                import swap_correction.ml.features.features_v2 as features_module_to_use
+                import swap_correction.ml.features.legacy.features_v2 as features_module_to_use
                 import swap_correction.ml.features as features_module
                 import swap_correction.ml.training.train_model as train_model_module
                 import sys

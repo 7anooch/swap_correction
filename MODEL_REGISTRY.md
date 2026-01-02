@@ -56,16 +56,16 @@ Actual No Swap  38513     54
 - **Gaussian Filter Sigma**: 4.6 (optimal from grid search)
 
 ### Feature Set
-- **Total Features**: 56
+- **Total Features**: ~36 (Features V4 - current default)
 - **Feature Types**:
-  - Position features (x, y for head, tail, mid, centroid)
-  - Distance features (head-tail, head-mid, tail-mid)
+  - Distance features (head-tail, head-mid, tail-mid, normalized by body length)
   - Speed features (head, tail, ratio)
-  - Velocity features (x, y components, magnitude)
-  - Angular features (orientation, motion angles, angular velocity)
-  - Geometric features (cross-sign, path curvature, alignment angle)
-  - Temporal context features (mean/std over windows: 5, 10, 20, 50 frames)
+  - Acceleration features (head, tail, relative)
+  - Angular features (orientation, motion angles, angular velocity with 3-point derivative)
+  - Geometric features (cross-sign, alignment angle, head/tail curvature ratio)
+  - Temporal context features (mean/std over windows: 10, 20, 50 frames)
   - Cumulative distance features
+- **Note**: This model uses Features V4, which is the current default implementation. Legacy feature versions (V2, V3, Original 56-feature set) are available in `swap_correction/ml/features/legacy/` for reference.
 
 ### Top 10 Most Important Features
 1. **alignment_angle_mean_50**: 0.3994
@@ -160,8 +160,9 @@ Actual No Swap  22869    605
 - **Gaussian Filter Sigma**: 4.6 (optimal from grid search)
 
 ### Feature Set
-- **Total Features**: 56 (same as Level1 model)
+- **Total Features**: ~36 (Features V4 - current default, same as Level1 model)
 - **Feature Types**: Same as Level1 model
+- **Note**: This model uses Features V4, which is the current default implementation.
 
 ### Top 10 Most Important Features
 1. **alignment_angle_mean_50**: 0.3486

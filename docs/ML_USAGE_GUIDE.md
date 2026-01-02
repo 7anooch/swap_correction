@@ -1,7 +1,8 @@
 # ML Swap Detection Usage Guide
 
-**Version**: 1.0  
-**Last Updated**: 2025-12-31
+**Version**: 1.1  
+**Last Updated**: 2026-01-02  
+**Note**: Updated to reflect Features V4 as the default implementation (~36 features)
 
 This guide provides comprehensive instructions for using the ML-based swap detection system for animal tracking data.
 
@@ -294,7 +295,7 @@ print(available)  # Shows which models are available
 
 **Error**: `ValueError: Feature count mismatch`
 
-**Solution**: Ensure you're using the same feature extraction pipeline. The models expect 56 features extracted with `swap_correction.ml.features.extract_all_frame_features_optimized()`.
+**Solution**: Ensure you're using the same feature extraction pipeline. Current models expect ~36 features (Features V4) extracted with `swap_correction.ml.features.extract_all_frame_features_optimized()`. Legacy models may use different feature counts.
 
 #### 3. Missing Data Files
 
@@ -336,9 +337,8 @@ print(data.columns)  # Should include: xhead, yhead, xtail, ytail, etc.
 3. Check feature extraction:
 ```python
 from swap_correction.ml.features import extract_all_frame_features_optimized
-from swap_correction.ml.features import extract_all_frame_features_optimized
 features = extract_all_frame_features_optimized(data, fps=30)
-print(features.shape)  # Should be (n_frames, 56)
+print(features.shape)  # Should be (n_frames, ~36) for Features V4 (current default)
 ```
 
 ---
